@@ -2,7 +2,9 @@
 import os
 import re
 import shutil
-import urllib2
+
+#import urllib2 # python 2 only?
+import urllib.request
 
 urlPrefix = "https://scryfall.com/search?q=!%27";
 urlSuffix = "%27&v=card&s=cname";
@@ -55,21 +57,21 @@ def shouldIgnoreCardName(cardName):
 		return True
 
 def isPartOfDoubleFacedCardDict(cardName):
-	for frontName, backName in doubleFacedCardDict.iteritems():
+	for frontName, backName in doubleFacedCardDict.items():
 		if frontName == cardName or backName == cardName:
 			return True
 
 	return False
 
 def isDoubleFacedFrontFace(cardName):
-	for frontName, backName in doubleFacedCardDict.iteritems():
+	for frontName, backName in doubleFacedCardDict.items():
 		if frontName == cardName:
 			return True
 
 	return False
 
 def isDoubleFacedBackFace(cardName):
-	for frontName, backName in doubleFacedCardDict.iteritems():
+	for frontName, backName in doubleFacedCardDict.items():
 		if backName == cardName:
 			return True
 
@@ -112,12 +114,12 @@ def getUrlSanitizedCardname(cardName):
 
 def addDoubleFacedCardsToDict(decklistDict):
 	cardsToAdd = {}
-	for cardName, cardCount in decklistDict.iteritems():
+	for cardName, cardCount in decklistDict.items():
 		otherFaceCardName = doubleFacedCardDict.get(cardName, None)
 		if otherFaceCardName != None:
 			cardsToAdd[otherFaceCardName] = cardCount
 
-	for cardName, cardCount in cardsToAdd.iteritems():
+	for cardName, cardCount in cardsToAdd.items():
 		decklistDict[cardName] = cardCount
 
 if not os.path.isdir(imageDirectoryRoot):
@@ -160,7 +162,7 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 
 			addDoubleFacedCardsToDict(decklistDict)
 			# iterate through dictionary
-			for cardName, cardCount in decklistDict.iteritems():
+			for cardName, cardCount in decklistDict.items():
 				# print "%s: %s" % (cardName, cardCount)
 				# check if file already exists in current directory
 				if shouldIgnoreCardName(cardName):
@@ -179,14 +181,15 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 					continue
 
 				# try to download from magiccards.info to image directory
-				print "%s not downloaded, trying to download from scryfall" % cardName
+				print("%s not downloaded, trying to download from scryfall" % cardName)
 				downloadSuccess = False
 				url = urlPrefix + getUrlSanitizedCardname(cardName) + urlSuffix
 				#print("Checking URL %s" % url)
-				response = urllib2.urlopen(url)
-				webContent = response.read()
+				response = urllib.request.urlopen(url)
+				webContent = str(response.read())
 				#print("webContent = %s" % webContent)
-				lines = webContent.split("\n")
+				lines = webContent.split("\\n")
+				#print("Split downloaded webcontent into %d lines" % len(lines))
 				for lineIndex in range(len(lines)):
 					line = lines[lineIndex]
 					#      <img class="card bng border-black" alt="" title="Eidolon of Countless Battles (BNG)" src="https://img.scryfall.com/cards/large/en/bng/7.jpg?1517813031" />
@@ -204,11 +207,11 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 						#print("line = ", line)
 						#print("imgUrl = ", imgUrl)
 
-						imgRequest = urllib2.Request(imgUrl, headers=headers)
-						imgData = urllib2.urlopen(imgRequest).read()
+						imgRequest = urllib.request.Request(imgUrl, headers=headers)
+						imgData = urllib.request.urlopen(imgRequest).read()
 
 						# save in main image directory, then copy over
-						outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a')
+						outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a+b')
 						outputImage.write(imgData)
 						outputImage.close()
 						downloadSuccess = True
@@ -237,7 +240,7 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 					# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
 
 			# iterate through dictionary again, looking at card counts
-			for cardName, cardCount in decklistDict.iteritems():
+			for cardName, cardCount in decklistDict.items():
 				if shouldIgnoreCardName(cardName):
 					continue
 
@@ -255,6 +258,6 @@ if len(unfoundCardDict) == 0:
 	print("*********** SUCCESS! No unfound card names! ***********")
 	print("*******************************************************")
 else:
-	for cardName, decklistName in unfoundCardDict.iteritems():
+	for cardName, decklistName in unfoundCardDict.items():
 		print("Couldn't find cardname '%s' in decklist '%s'" % (cardName, decklistName))
 
