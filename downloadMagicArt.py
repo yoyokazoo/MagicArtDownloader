@@ -2,16 +2,16 @@ import os
 import re
 import shutil
 
-#import urllib2 # python 2 only?
 import urllib.request
 
 urlPrefix = "https://scryfall.com/search?q=!%27";
 urlSuffix = "%27&v=card&s=cname";
-
 imgSuffix = ".jpg"
 
+doubleFacedCardDictionaryPath =  "./doubleFacedCardDict.txt"
 imageDirectoryRoot = "./magic_images"
 decklistDirectoryRoot = "./decklists"
+
 
 RECOPY_IMAGES = True
 
@@ -19,27 +19,7 @@ RECOPY_IMAGES = True
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
 headers = { 'User-Agent' : user_agent }
 
-# instead of specifying here, put in a file that gets auto-appended to as the front faces are downloaded
-doubleFacedCardDict = {
-	"Delver of Secrets": "Insectile Aberration",
-	"Jace, Vryn's Prodigy": "Jace, Telepath Unbound",
-	"Duskwatch Recruiter": "Krallenhorde Howler",
-	"Kytheon, Hero of Akros": "Gideon, Battle-Forged",
-	"Nissa, Vastwood Seer": "Nissa, Sage Animist",
-	"Huntmaster of the Fells": "Ravager of the Fells",
-	"Search for Azcanta": "Azcanta, The Sunken Ruin",
-	"Garruk Relentless": "Garruk, the Veil-Cursed",
-	"Arlinn Kord": "Arlinn, Embraced By the Moon",
-	"Ulrich of the Krallenhorde": "Ulrich, Uncontested Alpha",
-	"Legion's Landing": "Adanto, the First Fort",
-	"Brian Wong": "Brian Wong's Giant Ego",
-	"Gisela, the Broken Blade": "Brisela, Voice of Nightmares",
-	"Arguel's Blood Fast": "Temple of Aclazotz",
-}
 
-doubleFaceCardNamesToIgnore = [ "Jushi Apprentice" ]
-
-cardNamesToIgnore = [ "n/a" ]
 
 basicLandNames = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
 
@@ -108,9 +88,11 @@ def addDoubleFacedCardsToDict(decklistDict):
 	for cardName, cardCount in cardsToAdd.items():
 		decklistDict[cardName] = cardCount
 
+# create magic images directory, if necessary
 if not os.path.isdir(imageDirectoryRoot):
 	os.mkdir(imageDirectoryRoot);
 
+# create decklist directory, if necessary, and let the user know that nothing will happen until they fill it with decklists
 if not os.path.isdir(decklistDirectoryRoot):
 	os.mkdir(decklistDirectoryRoot);
 	raise Exception("Decklist directory doesn't exist! Creating it.  Fill with .txt decklists to start downloading images.")
@@ -120,8 +102,22 @@ existingImageDictionary = {}
 for subdir, dirs, files in os.walk(imageDirectoryRoot):
 	for file in files:
 		if file.endswith(imgSuffix):
-			#print file[:-4]
 			existingImageDictionary[file.lower()] = True
+
+# go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
+doubleFacedCardDict = {}
+with open(doubleFacedCardDictionaryPath, 'r+') as doubleFacedCardFile:
+	doubleFacedCardFileContents = doubleFacedCardFile.read()
+	frontFaceName = None
+	for line in doubleFacedCardFileContents.split("\n"):
+		if not frontFaceName:
+			frontFaceName = line
+		else:
+			doubleFacedCardDict[frontFaceName] = line
+			frontFaceName = None
+
+print(doubleFacedCardDict)
+doubleFacedCardDict = {}
 
 unfoundCardDict = {}
 # recursively go through decklists directory, looking for txt files
@@ -148,90 +144,94 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 
 			addDoubleFacedCardsToDict(decklistDict)
 			# iterate through dictionary
-			for cardName, cardCount in decklistDict.items():
-				# print "%s: %s" % (cardName, cardCount)
-				# check if file already exists in current directory
-				if shouldIgnoreCardName(cardName):
-					continue
+			rerunLoop = True
 
-				cardName = fixCardName(cardName, formatName)
-				#print("Fixed cardName %s" % cardName)
+			while(rerunLoop):
+				rerunLoop = False
 
-				imageNameToCheck = cardName + imgSuffix
-				if imageNameToCheck in files:
-					#print "%s found in directory, skipping" % cardName
-					continue
+				for cardName, cardCount in decklistDict.items():
+					# print "%s: %s" % (cardName, cardCount)
+					# check if file already exists in current directory
+					cardName = fixCardName(cardName, formatName)
+					#print("Fixed cardName %s" % cardName)
 
-				# check if file already exists in image directory
-				if existingImageDictionary.get(imageNameToCheck.lower(), False):
-					#print "%s found in magic images directory, continuing" % cardName
-					continue
+					imageNameToCheck = cardName + imgSuffix
+					if imageNameToCheck in files:
+						#print "%s found in directory, skipping" % cardName
+						continue
 
-				# try to download from magiccards.info to image directory
-				print("%s not downloaded, trying to download from scryfall" % cardName)
-				downloadSuccess = False
-				url = urlPrefix + getUrlSanitizedCardname(cardName) + urlSuffix
-				#print("Checking URL %s" % url)
-				response = urllib.request.urlopen(url)
-				webContent = str(response.read())
-				#print("webContent = %s" % webContent)
-				lines = webContent.split("\\n")
-				#print("Split downloaded webcontent into %d lines" % len(lines))
-				for lineIndex in range(len(lines)):
-					line = lines[lineIndex]
-					#      <img class="card bng border-black" alt="" title="Eidolon of Countless Battles (BNG)" src="https://img.scryfall.com/cards/large/en/bng/7.jpg?1517813031" />
-					matches = None
-					if isDoubleFacedFrontFace(cardName):
-						matches = re.search("\s*<img class.*src=\"(.*a\.jpg).*", line)
-					elif isDoubleFacedBackFace(cardName):
-						matches = re.search("\s*<img class.*src=\"(.*b\.jpg).*", line)
-					else:
-						matches = re.search("\s*<img class.*src=\"(.*\.jpg).*", line)
+					# check if file already exists in image directory
+					if existingImageDictionary.get(imageNameToCheck.lower(), False):
+						#print "%s found in magic images directory, continuing" % cardName
+						continue
 
-					imgUrl = None
-					if matches:
-						imgUrl = matches.group(1)
-						#print("line = ", line)
-						#print("imgUrl = ", imgUrl)
+					# try to download from magiccards.info to image directory
+					print("%s not downloaded, trying to download from scryfall" % cardName)
+					downloadSuccess = False
+					url = urlPrefix + getUrlSanitizedCardname(cardName) + urlSuffix
+					#print("Checking URL %s" % url)
+					response = urllib.request.urlopen(url)
+					webContent = str(response.read())
+					#print("webContent = %s" % webContent)
+					lines = webContent.split("\\n")
+					#print("Split downloaded webcontent into %d lines" % len(lines))
+					for lineIndex in range(len(lines)):
+						line = lines[lineIndex]
+						# Example lines
+						#          <img class="card a25 border-black" alt="" title="Savannah Lions (A25)" src="https://img.scryfall.com/cards/large/en/a25/33.jpg?1521724798" />
+						#          <img class="card isd border-black" alt="" title="Delver of Secrets // Insectile Aberration (ISD)" data-rotate="flip-backside" src="https://img.scryfall.com/cards/large/front/1/1/11bf83bb-c95b-4b4f-9a56-ce7a1816307a.jpg?1545407245" />
+						#          <img class="card uma border-black" alt="" title="Fire // Ice (UMA)" data-rotate="rotate-90cw" src="https://img.scryfall.com/cards/large/front/3/f/3f822331-315e-4297-bb69-f1069032c6c5.jpg?1547518354" />
+						matches = re.search("\s*<img class.*title=\"(.*?)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*", line)
 
-						imgRequest = urllib.request.Request(imgUrl, headers=headers)
-						imgData = urllib.request.urlopen(imgRequest).read()
+						cardTitle = None
+						isWeirdCardType = None
+						weirdCardType = None
+						imgUrl = None
+						if matches:
+							cardTitle = matches.group(1)
+							isWeirdCardType = matches.group(2)
+							weirdCardType = matches.group(3)
+							imgUrl = matches.group(4)
 
-						# save in main image directory, then copy over
-						outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a+b')
-						outputImage.write(imgData)
-						outputImage.close()
-						downloadSuccess = True
+							print()
+							print("cardTitle = ", cardTitle)
+							print("isWeirdCardType = ", isWeirdCardType)
+							print("weirdCardType = ", weirdCardType)
+							print("line = ", line)
+							print("imgUrl = ", imgUrl)
+							print()
 
-					doubleFaced = False#imgUrl and (imgUrl[-5] == 'a' or imgUrl[-5] == 'b') # Need a better way to determine if a card is a double-faced card or not, Wax/Wane ended in a.jpg
-					#print("Double Faced? %s (imgUrl = %s)", doubleFaced, imgUrl)
-					#if doubleFaced:
-					#	print("%s is double faced! ignoreDoubleFaceCardName? %s, isPartOfDoubleFacedCardDict? %s" % (doubleFaced, ignoreDoubleFaceCardName(cardName), isPartOfDoubleFacedCardDict(cardName)))
-					if(doubleFaced and (not ignoreDoubleFaceCardName(cardName)) and (not isPartOfDoubleFacedCardDict(cardName))):
-						os.remove(os.path.join(imageDirectoryRoot, imageNameToCheck))
-						try:
-							os.remove(os.path.join(subdir, imageNameToCheck))
-						except:
-							pass
-						otherFaceLine = lines[lineIndex+3]
-						#         <a href="/xln/en/22b.html">Adanto, the First Fort</a><br><br>
-						otherFaceMatches = re.search("\s*<a href.*>(.*)<\/a>.*", otherFaceLine)
-						otherFaceMatch = "NOT FOUND"
-						if otherFaceMatches:
-							otherFaceMatch = otherFaceMatches.group(1)
-						preparedLine = "\"%s\": \"%s\"," % (cardName, otherFaceMatch)
-						raise Exception("Found a double faced card '%s' that isn't part of the double faced card dictionary.  Add it and re-run. Try:\n%s" % (cardName, preparedLine))
-			
-				if not downloadSuccess:
-					unfoundCardDict[imageNameToCheck] = fileName
-					print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % cardName)
-					# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
+							imgRequest = urllib.request.Request(imgUrl, headers=headers)
+							imgData = urllib.request.urlopen(imgRequest).read()
+
+							# save in main image directory, then copy over
+							outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a+b')
+							outputImage.write(imgData)
+							outputImage.close()
+							downloadSuccess = True
+
+						doubleFaced = weirdCardType == "flip-backside"
+
+						# If we find a double-faced card that we previously didn't know about, add it to the dictionary
+						if(doubleFaced and (not isPartOfDoubleFacedCardDict(cardName))):
+							print("Found a double faced card '%s' that isn't part of the double faced card dictionary." % cardName)
+							#os.remove(os.path.join(imageDirectoryRoot, imageNameToCheck))
+							#try:
+							#	os.remove(os.path.join(subdir, imageNameToCheck))
+							#except:
+							#	pass
+
+
+
+							#raise Exception("Found a double faced card '%s' that isn't part of the double faced card dictionary.  Add it and re-run. Try:\n%s" % (cardName, preparedLine))
+				
+					if not downloadSuccess:
+						unfoundCardDict[imageNameToCheck] = fileName
+						print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % cardName)
+						# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
 
 			# iterate through dictionary again, looking at card counts
 			for cardName, cardCount in decklistDict.items():
-				if shouldIgnoreCardName(cardName):
-					continue
-
 				cardName = fixCardName(cardName, formatName)
 
 				if not unfoundCardDict.get(cardName + imgSuffix, False):
