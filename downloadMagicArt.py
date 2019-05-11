@@ -1,4 +1,3 @@
-#http://magiccards.info/query?q=%21bayou&v=card&s=cname
 import os
 import re
 import shutil
@@ -8,8 +7,6 @@ import urllib.request
 
 urlPrefix = "https://scryfall.com/search?q=!%27";
 urlSuffix = "%27&v=card&s=cname";
-
-magicCardsDotInfoPrefix = "https://magiccards.info"
 
 imgSuffix = ".jpg"
 
@@ -22,6 +19,7 @@ RECOPY_IMAGES = True
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
 headers = { 'User-Agent' : user_agent }
 
+# instead of specifying here, put in a file that gets auto-appended to as the front faces are downloaded
 doubleFacedCardDict = {
 	"Delver of Secrets": "Insectile Aberration",
 	"Jace, Vryn's Prodigy": "Jace, Telepath Unbound",
@@ -39,7 +37,6 @@ doubleFacedCardDict = {
 	"Arguel's Blood Fast": "Temple of Aclazotz",
 }
 
-ignoreSplitCardName = [ "Show and Tell", "Tooth and Nail" ]
 doubleFaceCardNamesToIgnore = [ "Jushi Apprentice" ]
 
 cardNamesToIgnore = [ "n/a" ]
@@ -77,16 +74,11 @@ def isDoubleFacedBackFace(cardName):
 
 	return False
 
-def isSplitCard(cardName):
-	if cardName in ignoreSplitCardName:
-		return False
-
-	return re.search("^(\S*?) and (\S*)", cardName)
-
 def fixCardName(cardName, formatName):
+	# Convert Fire / Ice, Fire//Ice into Fire_Ice
 	splitCardName = re.search("^(\S*?)\s*\/\/?\s*(\S*)", cardName)
 	if splitCardName:
-		newCardName = splitCardName.group(1).capitalize() + " and " + splitCardName.group(2).capitalize()
+		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
 		return newCardName
 
 	if cardName in basicLandNames:
@@ -95,13 +87,6 @@ def fixCardName(cardName, formatName):
 	return cardName
 
 def getUrlSanitizedCardname(cardName):
-	splitCard = isSplitCard(cardName)
-	if splitCard:
-		# 'Rough and Tumble' becomes 'Rough (Rough/Tumble)'
-		convertedSplitCardName = splitCard.group(1) + " (" + splitCard.group(1) + "/" + splitCard.group(2) + ")"
-		print("Converting split card name '%s' into '%s'" % (cardName, convertedSplitCardName))
-		cardName = convertedSplitCardName
-
 	# https://www.degraeve.com/reference/specialcharacters.php
 	cardName = cardName.replace("'", "")
 	cardName = cardName.replace("(", "%28")
@@ -110,6 +95,7 @@ def getUrlSanitizedCardname(cardName):
 	cardName = cardName.replace("\"", "%34")
 	cardName = cardName.replace(":", "%3A")
 	cardName = cardName.replace(" ", "+")
+	cardName = cardName.replace("_", "//") # change Fire_Ice to Fire//Ice
 	return cardName
 
 def addDoubleFacedCardsToDict(decklistDict):
@@ -169,6 +155,7 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 					continue
 
 				cardName = fixCardName(cardName, formatName)
+				#print("Fixed cardName %s" % cardName)
 
 				imageNameToCheck = cardName + imgSuffix
 				if imageNameToCheck in files:
@@ -216,10 +203,11 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 						outputImage.close()
 						downloadSuccess = True
 
-					doubleFaced = imgUrl and (imgUrl[-5] == 'a' or imgUrl[-5] == 'b')
+					doubleFaced = False#imgUrl and (imgUrl[-5] == 'a' or imgUrl[-5] == 'b') # Need a better way to determine if a card is a double-faced card or not, Wax/Wane ended in a.jpg
+					#print("Double Faced? %s (imgUrl = %s)", doubleFaced, imgUrl)
 					#if doubleFaced:
-					#	print("%s is double faced! is split card? %s, ignoreDoubleFaceCardName? %s, isPartOfDoubleFacedCardDict? %s" % (doubleFaced, isSplitCard(cardName), ignoreDoubleFaceCardName(cardName), isPartOfDoubleFacedCardDict(cardName)))
-					if(doubleFaced and (not isSplitCard(cardName)) and (not ignoreDoubleFaceCardName(cardName)) and (not isPartOfDoubleFacedCardDict(cardName))):
+					#	print("%s is double faced! ignoreDoubleFaceCardName? %s, isPartOfDoubleFacedCardDict? %s" % (doubleFaced, ignoreDoubleFaceCardName(cardName), isPartOfDoubleFacedCardDict(cardName)))
+					if(doubleFaced and (not ignoreDoubleFaceCardName(cardName)) and (not isPartOfDoubleFacedCardDict(cardName))):
 						os.remove(os.path.join(imageDirectoryRoot, imageNameToCheck))
 						try:
 							os.remove(os.path.join(subdir, imageNameToCheck))
