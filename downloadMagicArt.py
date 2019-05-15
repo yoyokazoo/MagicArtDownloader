@@ -3,10 +3,12 @@ import re
 import shutil
 
 import urllib.request
+import string
 
 urlPrefix = "https://scryfall.com/search?q=!%27";
 urlSuffix = "%27&v=card&s=cname";
-imgSuffix = ".jpg"
+IMAGE_SUFFIX = ".jpg"
+DECKLIST_SUFFIX = ".txt"
 
 doubleFacedCardDictionaryPath =  "./doubleFacedCardDict.txt"
 imageDirectoryRoot = "./magic_images"
@@ -14,6 +16,7 @@ decklistDirectoryRoot = "./decklists"
 
 
 RECOPY_IMAGES = True
+USE_FORMAT_SPECIFIC_LANDS = True
 
 # urllib2 junk
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
@@ -21,7 +24,7 @@ headers = { 'User-Agent' : user_agent }
 
 
 
-basicLandNames = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
 
 def ignoreDoubleFaceCardName(cardName):
 	return cardName in doubleFaceCardNamesToIgnore
@@ -61,7 +64,10 @@ def fixCardName(cardName, formatName):
 		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
 		return newCardName
 
-	if cardName in basicLandNames:
+	# Convert Plains into PlainsModern, PlainsStandard, PlainsTestCard etc.
+	# so you can associate different basic land arts with different decklists
+	#print("Card name: %s Format name: %s" % (cardName, formatName))
+	if USE_FORMAT_SPECIFIC_LANDS and cardName in BASIC_LAND_NAMES:
 		cardName = cardName + formatName
 
 	return cardName
@@ -88,85 +94,134 @@ def addDoubleFacedCardsToDict(decklistDict):
 	for cardName, cardCount in cardsToAdd.items():
 		decklistDict[cardName] = cardCount
 
-# create magic images directory, if necessary
-if not os.path.isdir(imageDirectoryRoot):
-	os.mkdir(imageDirectoryRoot);
+def prepareMagicImagesDirectory():
+	# create magic images directory, if necessary
+	if not os.path.isdir(imageDirectoryRoot):
+		os.mkdir(imageDirectoryRoot);
 
-# create decklist directory, if necessary, and let the user know that nothing will happen until they fill it with decklists
-if not os.path.isdir(decklistDirectoryRoot):
-	os.mkdir(decklistDirectoryRoot);
-	raise Exception("Decklist directory doesn't exist! Creating it.  Fill with .txt decklists to start downloading images.")
+def prepareDecklistsDirectory():
+	# create decklist directory, if necessary, and let the user know that nothing will happen until they fill it with decklists
+	if not os.path.isdir(decklistDirectoryRoot):
+		os.mkdir(decklistDirectoryRoot);
+		raise Exception("Decklist directory doesn't exist! Creating it.  Fill with %s decklists to start downloading images." % DECKLIST_SUFFIX)
 
-# go through image directory, make dictionary of existing names
-existingImageDictionary = {}
-for subdir, dirs, files in os.walk(imageDirectoryRoot):
-	for file in files:
-		if file.endswith(imgSuffix):
-			existingImageDictionary[file.lower()] = True
+def prepareDoubleFacedCardFile():
+	# go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
+	if not os.path.isfile(doubleFacedCardDictionaryPath):
+		open(doubleFacedCardDictionaryPath, 'w').close()
 
-# go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
-doubleFacedCardDict = {}
-if not os.path.isfile(doubleFacedCardDictionaryPath):
-	open(doubleFacedCardDictionaryPath, 'w').close()
-with open(doubleFacedCardDictionaryPath, 'r+') as doubleFacedCardFile:
-	doubleFacedCardFileContents = doubleFacedCardFile.read()
-	frontFaceName = None
-	for line in doubleFacedCardFileContents.split("\n"):
-		if not frontFaceName:
-			frontFaceName = line
-		else:
-			doubleFacedCardDict[frontFaceName] = line
-			frontFaceName = None
+def populateDoubleFacedCardDict():
+	doubleFacedCardDict = {}
+	with open(doubleFacedCardDictionaryPath, 'r+') as doubleFacedCardFile:
+		doubleFacedCardFileContents = doubleFacedCardFile.read()
+		frontFaceName = None
+		for line in doubleFacedCardFileContents.split("\n"):
+			if not frontFaceName:
+				frontFaceName = line
+			else:
+				doubleFacedCardDict[frontFaceName] = line
+				frontFaceName = None
+
+	return doubleFacedCardDict
+
+def populateExistingImageDict():
+	# go through image directory, make dictionary of existing names
+	existingImageDict = {}
+
+	for subdir, dirs, files in os.walk(imageDirectoryRoot):
+		for file in files:
+			if file.endswith(IMAGE_SUFFIX):
+				existingImageDict[file.lower()] = True
+
+	return existingImageDict
+
+def populateInitialDecklistDict(subDir, fileName):
+	# load it and cram into dictionary
+	decklistDict = {}
+	fileContents = open(os.path.join(subDir, fileName), 'r').read()
+	for line in fileContents.split("\n"):
+		matches = re.search("(\d*)x?(\s*)(.*)", line)
+		cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
+		cardName = matches.group(3)
+
+		if cardName:
+			decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
+
+	addDoubleFacedCardsToDict(decklistDict)
+	return decklistDict
+
+def deleteExistingDecklistImages(subDir, files):
+	if not RECOPY_IMAGES:
+		return
+
+	for fileName in files:
+		if fileName.endswith(IMAGE_SUFFIX):
+			os.remove(os.path.join(subDir, fileName))
+
+def getFormatNameFromSubDir(subDir):
+	subDir = subDir.replace('\\', '/')
+	formatNameMatches = re.search("\.\/decklists\/(.*?)(\/|$)", subDir)
+	formatName = formatNameMatches.group(1) if formatNameMatches else ""
+	return formatName
+
+def canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+	if imageNameToCheck in files:
+		#print "%s found in directory, skipping" % cardName
+		return True
+
+	# check if file already exists in image directory
+	if existingImageDict.get(imageNameToCheck.lower(), False):
+		#print "%s found in magic images directory, continuing" % cardName
+		return True
+
+	return False
+
+# main
+prepareMagicImagesDirectory()
+prepareDecklistsDirectory()
+prepareDoubleFacedCardFile()
+
+doubleFacedCardDict = populateDoubleFacedCardDict()
+existingImageDict = populateExistingImageDict()
+
+unfoundCardDict = {}
+
+decklistDict = {}
 
 #print(doubleFacedCardDict)
 
-unfoundCardDict = {}
-# recursively go through decklists directory, looking for txt files
-for subdir, dirs, files in os.walk(decklistDirectoryRoot):
-	if RECOPY_IMAGES:
-		for fileName in files:
-			if fileName.endswith(imgSuffix):
-				os.remove(os.path.join(subdir, fileName))
 
-	formatNameMatches = re.search("\.\/decklists\/(.*?)(\/|$)", subdir)
-	formatName = formatNameMatches.group(1) if formatNameMatches else ""
+# recursively go through decklists directory, looking for txt files
+for subDir, dirs, files in os.walk(decklistDirectoryRoot):
+	deleteExistingDecklistImages(subDir, files)
+	formatName = getFormatNameFromSubDir(subDir)
 
 	for fileName in files:
 		#if a txt file is found
-		if fileName.endswith(".txt"):
-			# load it and cram into dictionary
-			decklistDict = {}
-			fileContents = open(os.path.join(subdir, fileName), 'r').read()
-			for line in fileContents.split("\n"):
-				matches = re.search("(\d*)x?(\s*)(.*)", line)
-				cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
-				cardName = matches.group(3)
-
-				if cardName:
-					decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
-
-			addDoubleFacedCardsToDict(decklistDict)
+		if fileName.endswith(DECKLIST_SUFFIX):
+			decklistDict = populateInitialDecklistDict(subDir, fileName)
 			# iterate through dictionary
 			rerunLoop = True
-
 			while(rerunLoop):
 				rerunLoop = False
 
-				for cardName, cardCount in decklistDict.items():
+				for initialCardName, cardCount in decklistDict.items():
 					# print "%s: %s" % (cardName, cardCount)
 					# check if file already exists in current directory
-					cardName = fixCardName(cardName, formatName)
+					cardName = fixCardName(initialCardName, formatName)
 					#print("Fixed cardName %s" % cardName)
 
-					imageNameToCheck = cardName + imgSuffix
-					if imageNameToCheck in files:
-						#print "%s found in directory, skipping" % cardName
+					imageNameToCheck = cardName + IMAGE_SUFFIX
+					if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 						continue
 
-					# check if file already exists in image directory
-					if existingImageDictionary.get(imageNameToCheck.lower(), False):
-						#print "%s found in magic images directory, continuing" % cardName
-						continue
+					if USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
+						print("Couldn't find '%s' in the magic images folder or existing images dict.  If you want a format-specific land, you'll have to create it manually.  Using the default %s instead" % (cardName, initialCardName))
+						cardName = initialCardName
+
+						imageNameToCheck = cardName + IMAGE_SUFFIX
+						if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+							continue
 
 					# try to download from magiccards.info to image directory
 					print("%s not downloaded, trying to download from scryfall" % cardName)
@@ -200,7 +255,7 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 							backInImgUrl = "back" in imgUrl
 							isBackImage = imgUrlLastChar == 'b' or backInImgUrl # this feels fragile, but such is the fate of screen scraping
 
-							print("\ncardName = %s\ncardTitle = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
+							#print("\ncardName = %s\ncardTitle = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
 							if (isDoubleFacedFrontFace(cardName) and isBackImage) or (isDoubleFacedBackFace(cardName) and not isBackImage):
 								pass # if-statement was more readable this way
@@ -238,14 +293,23 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 						print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % cardName)
 						# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
 
-			# iterate through dictionary again, looking at card counts
-			for cardName, cardCount in decklistDict.items():
-				cardName = fixCardName(cardName, formatName)
 
-				if not unfoundCardDict.get(cardName + imgSuffix, False):
+			# iterate through dictionary again, copying over as many copies as the decklist specifies
+			for initialCardName, cardCount in decklistDict.items():
+				cardName = fixCardName(initialCardName, formatName)
+				imageNameToCheck = cardName + IMAGE_SUFFIX
+
+				if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+					pass # format-specific art exists
+				elif USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
+					print("Couldn't find '%s' in the magic images folder or existing images dict.  Using the default %s instead" % (cardName, initialCardName))
+					cardName = initialCardName
+					imageNameToCheck = cardName + IMAGE_SUFFIX
+
+				if not unfoundCardDict.get(imageNameToCheck, False):
 					suffixNum = 1
 					while suffixNum <= cardCount:
-						shutil.copy(os.path.join(imageDirectoryRoot, cardName + imgSuffix), os.path.join(subdir, cardName + "_" + str(suffixNum) + imgSuffix))
+						shutil.copy(os.path.join(imageDirectoryRoot, cardName + IMAGE_SUFFIX), os.path.join(subDir, cardName + "_" + str(suffixNum) + IMAGE_SUFFIX))
 						suffixNum += 1
 
 # print out unfound cards
