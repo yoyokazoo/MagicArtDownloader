@@ -106,6 +106,8 @@ for subdir, dirs, files in os.walk(imageDirectoryRoot):
 
 # go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
 doubleFacedCardDict = {}
+if not os.path.isfile(doubleFacedCardDictionaryPath):
+	open(doubleFacedCardDictionaryPath, 'w').close()
 with open(doubleFacedCardDictionaryPath, 'r+') as doubleFacedCardFile:
 	doubleFacedCardFileContents = doubleFacedCardFile.read()
 	frontFaceName = None
@@ -116,8 +118,7 @@ with open(doubleFacedCardDictionaryPath, 'r+') as doubleFacedCardFile:
 			doubleFacedCardDict[frontFaceName] = line
 			frontFaceName = None
 
-print(doubleFacedCardDict)
-doubleFacedCardDict = {}
+#print(doubleFacedCardDict)
 
 unfoundCardDict = {}
 # recursively go through decklists directory, looking for txt files
@@ -140,7 +141,9 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 				matches = re.search("(\d*)x?(\s*)(.*)", line)
 				cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
 				cardName = matches.group(3)
-				decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
+
+				if cardName:
+					decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
 
 			addDoubleFacedCardsToDict(decklistDict)
 			# iterate through dictionary
@@ -193,37 +196,42 @@ for subdir, dirs, files in os.walk(decklistDirectoryRoot):
 							weirdCardType = matches.group(3)
 							imgUrl = matches.group(4)
 
-							print()
-							print("cardTitle = ", cardTitle)
-							print("isWeirdCardType = ", isWeirdCardType)
-							print("weirdCardType = ", weirdCardType)
-							print("line = ", line)
-							print("imgUrl = ", imgUrl)
-							print()
+							imgUrlLastChar = imgUrl[-5]
+							backInImgUrl = "back" in imgUrl
+							isBackImage = imgUrlLastChar == 'b' or backInImgUrl # this feels fragile, but such is the fate of screen scraping
 
-							imgRequest = urllib.request.Request(imgUrl, headers=headers)
-							imgData = urllib.request.urlopen(imgRequest).read()
+							print("\ncardName = %s\ncardTitle = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
-							# save in main image directory, then copy over
-							outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a+b')
-							outputImage.write(imgData)
-							outputImage.close()
-							downloadSuccess = True
+							if (isDoubleFacedFrontFace(cardName) and isBackImage) or (isDoubleFacedBackFace(cardName) and not isBackImage):
+								pass # if-statement was more readable this way
+							else:
+								imgRequest = urllib.request.Request(imgUrl, headers=headers)
+								imgData = urllib.request.urlopen(imgRequest).read()
+
+								# save in main image directory, then copy over
+								outputImage = open(os.path.join(imageDirectoryRoot, imageNameToCheck), 'a+b')
+								outputImage.write(imgData)
+								outputImage.close()
+								downloadSuccess = True
 
 						doubleFaced = weirdCardType == "flip-backside"
 
 						# If we find a double-faced card that we previously didn't know about, add it to the dictionary
 						if(doubleFaced and (not isPartOfDoubleFacedCardDict(cardName))):
 							print("Found a double faced card '%s' that isn't part of the double faced card dictionary." % cardName)
-							#os.remove(os.path.join(imageDirectoryRoot, imageNameToCheck))
-							#try:
-							#	os.remove(os.path.join(subdir, imageNameToCheck))
-							#except:
-							#	pass
+							# Delver of Secrets // Insectile Aberration (ISD)
+							cardTitleMatches = re.search(".*// (.*) \(...\)", cardTitle)
+							backFaceName = cardTitleMatches.group(1)
+							print("Back face name %s" % backFaceName)
 
-
-
-							#raise Exception("Found a double faced card '%s' that isn't part of the double faced card dictionary.  Add it and re-run. Try:\n%s" % (cardName, preparedLine))
+							if backFaceName:
+								with open(doubleFacedCardDictionaryPath, 'a+') as doubleFacedCardFile:
+									doubleFacedCardFile.write(cardName + "\n")
+									doubleFacedCardFile.write(backFaceName + "\n")
+								doubleFacedCardDict[cardName] = backFaceName
+								rerunLoop = True
+							else:
+								raise Exception("Unable to parse back face name from: '%s' " % cardTitle)
 				
 					if not downloadSuccess:
 						unfoundCardDict[imageNameToCheck] = fileName
