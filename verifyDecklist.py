@@ -58,13 +58,13 @@ def levenshtein_ratio_and_distance(s, t, ratio_calc = False):
         # This is the minimum number of edits needed to convert string a to string b
         return "The strings are {} edits away".format(distance[row][col])
 
-def populateDecklistDicts(subDir, fileName):
+def populateDecklistDicts(filePath):
 	# load it and cram into dictionary
 	maindeckDict = {}
 	sideboardDict = {}
 	currentDict = maindeckDict
 
-	fileContents = open(os.path.join(subDir, fileName), 'r').read()
+	fileContents = open(filePath, 'r').read()
 	for line in fileContents.split("\n"):
 		maindeck_line = re.search(MAINDECK_REGEX, line)
 		if maindeck_line:
@@ -86,30 +86,67 @@ def populateDecklistDicts(subDir, fileName):
 	combinedDict = { combinedKey: maindeckDict.get(combinedKey, 0) + sideboardDict.get(combinedKey, 0) for combinedKey in set(maindeckDict) | set(sideboardDict) }
 	return combinedDict, maindeckDict, sideboardDict
 
-def verifyDecklist(maindeckDict, sideboardDict):
+def replaceCardNameInDecklist(oldCardName, newCardName, filePath):
+	print("Replacing %s with %s in %s" % (oldCardName, newCardName, filePath))
+	fileContents = None
+	with open(filePath) as f:
+		fileContents=f.read().replace(oldCardName, newCardName)
+
+		if not fileContents:
+			raise Exception("Couldn't open %s, exiting" % filePath)
+
+	with open(filePath, "w") as f:
+		f.write(fileContents)
+
+def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
 	print("Verifying decklist %s %s" % (maindeckDict, sideboardDict))
 	for card in maindeckDict.keys():
 		print("Checking card %s" % card)
 		if not card in cards.ALL_CARDNAMES:
+			if card.lower() in cards.ALL_LOWERCASE_CARDNAMES:
+				print("Fixing capitalization on %s to %s" % (card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()]))
+				replaceCardNameInDecklist(card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()], filePath)
+				continue
+
 			distances = {}
 			for leveshtein_card in cards.ALL_CARDNAMES:
 				leveshtein_distance = levenshtein_ratio_and_distance(card,leveshtein_card,ratio_calc = True)
 				distances[leveshtein_card] = leveshtein_distance
 				#print("leveshtein_distance between %s and %s is %s" % (leveshtein_distance, card, leveshtein_card))
 			count = 0
+			print("\n-------------------------------------------------------\n")
+			print("Couldn't find cardname %s. Here are the closest five cardnames: \n" % card)
+			replacement_choices = []
 			for key in sorted(distances, key=distances.get, reverse=True):
-				print(key, distances[key])
+				replacement_choices.append(key)
 				count += 1
+				print("%s) %s %s" % (count, key, distances[key]))
 				if count == 5:
 					break
-			print("Couldn't find cardname %s" % card)
+			print()
+			print("6) This is a custom card, add it to the dictionary of card names")
+			print("7) None of these options are good, I'll fix it manually")
+			print("\n-------------------------------------------------------\n")
+			choice = int(input("Input the number of the cardname you'd like to replace it with: "))
+
+			if choice >= 1 and choice <= 5:
+				replaceCardNameInDecklist(card, replacement_choices[choice-1], filePath)
+			elif choice == 6:
+				print("Adding card to custom cards file")
+			elif chioce == 7:
+				print("Skipping %s in %s, probably needs to be fixed in the file manually." % (card, filePath))
+			else:
+				raise Exception("Invalid choice!")
+
+			print(choice)
 			raise Exception()
 
 def verifyAllDecklists():
 	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 		for fileName in files:
 			if fileName.endswith(DECKLIST_SUFFIX):
-				combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(subDir, fileName)
-				verified = verifyDecklist(maindeckDict, sideboardDict)
+				filePath = os.path.join(subDir, fileName)
+				combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
+				verified = verifyAndFixDecklist(maindeckDict, sideboardDict, filePath)
 
 verifyAllDecklists()
