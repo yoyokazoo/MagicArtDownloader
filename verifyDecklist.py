@@ -98,7 +98,7 @@ def replaceCardNameInDecklist(oldCardName, newCardName, filePath):
 	with open(filePath, "w") as f:
 		f.write(fileContents)
 
-def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
+def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 	#print("Verifying decklist %s %s" % (maindeckDict, sideboardDict))
 	for card in maindeckDict.keys():
 		#print("Checking card %s" % card)
@@ -135,18 +135,20 @@ def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
 			elif choice == 6:
 				print("Adding %s to custom cards file" % card)
 				cards.addCardToCustomCards(card)
-			elif chioce == 7:
+			elif choice == 7:
 				print("Skipping %s in %s, probably needs to be fixed in the file manually." % (card, filePath))
 			else:
 				raise Exception("Invalid choice!")
 
-def verifyAllDecklists():
+def verifyAllDecklistCardnames():
 	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 		for fileName in files:
+			if fileName == "TestCards.txt":
+				continue
 			if fileName.endswith(DECKLIST_SUFFIX):
 				filePath = os.path.join(subDir, fileName)
 				combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
-				verified = verifyAndFixDecklist(maindeckDict, sideboardDict, filePath)
+				verified = verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath)
 	print("Done verifying decklists")
 
-verifyAllDecklists()
+verifyAllDecklistCardnames()
