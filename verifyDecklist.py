@@ -99,9 +99,9 @@ def replaceCardNameInDecklist(oldCardName, newCardName, filePath):
 		f.write(fileContents)
 
 def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
-	print("Verifying decklist %s %s" % (maindeckDict, sideboardDict))
+	#print("Verifying decklist %s %s" % (maindeckDict, sideboardDict))
 	for card in maindeckDict.keys():
-		print("Checking card %s" % card)
+		#print("Checking card %s" % card)
 		if not card in cards.ALL_CARDNAMES:
 			if card.lower() in cards.ALL_LOWERCASE_CARDNAMES:
 				print("Fixing capitalization on %s to %s" % (card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()]))
@@ -114,17 +114,18 @@ def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
 				distances[leveshtein_card] = leveshtein_distance
 				#print("leveshtein_distance between %s and %s is %s" % (leveshtein_distance, card, leveshtein_card))
 			count = 0
-			print("\n-------------------------------------------------------\n")
-			print("Couldn't find cardname %s. Here are the closest five cardnames: \n" % card)
 			replacement_choices = []
 			for key in sorted(distances, key=distances.get, reverse=True):
 				replacement_choices.append(key)
 				count += 1
+				if count == 1:
+					print("\n-------------------------------------------------------\n")
+					print("Couldn't find cardname %s. Here are the closest five cardnames: \n" % card)
 				print("%s) %s %s" % (count, key, distances[key]))
 				if count == 5:
 					break
 			print()
-			print("6) This is a custom card, add it to the dictionary of card names")
+			print("6) This is a custom card, add it to the dictionary of card names (make sure it's spelled how you want it!)")
 			print("7) None of these options are good, I'll fix it manually")
 			print("\n-------------------------------------------------------\n")
 			choice = int(input("Input the number of the cardname you'd like to replace it with: "))
@@ -132,14 +133,12 @@ def verifyAndFixDecklist(maindeckDict, sideboardDict, filePath):
 			if choice >= 1 and choice <= 5:
 				replaceCardNameInDecklist(card, replacement_choices[choice-1], filePath)
 			elif choice == 6:
-				print("Adding card to custom cards file")
+				print("Adding %s to custom cards file" % card)
+				cards.addCardToCustomCards(card)
 			elif chioce == 7:
 				print("Skipping %s in %s, probably needs to be fixed in the file manually." % (card, filePath))
 			else:
 				raise Exception("Invalid choice!")
-
-			print(choice)
-			raise Exception()
 
 def verifyAllDecklists():
 	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
@@ -148,5 +147,6 @@ def verifyAllDecklists():
 				filePath = os.path.join(subDir, fileName)
 				combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
 				verified = verifyAndFixDecklist(maindeckDict, sideboardDict, filePath)
+	print("Done verifying decklists")
 
 verifyAllDecklists()
