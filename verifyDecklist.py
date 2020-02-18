@@ -7,7 +7,7 @@ import argparse
 DECKLIST_SUFFIX = ".txt"
 DECKLIST_DIR = "decklists/2019/BOOStandard/Kyle"
 DECKLIST_TO_CHECK = "_decklist.txt"
-DECKLIST_DIRECTORY_ROOT = "./decklists"
+DECKLIST_DIRECTORY_ROOT = ".%sdecklists" % os.path.sep
 
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
@@ -164,12 +164,30 @@ def verifyAllDecklistCardnames():
 
 	print("Done verifying decklists")
 
+def findAllFilePathsWithSoupPlayerName(soup_player_name):
+	path_to_exclude = "Team Set Sealed"
+
+	file_paths = []
+	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
+		for fileName in files:
+			filePath = os.path.join(subDir, fileName)
+			if path_to_exclude in filePath:
+				continue
+			if fileName.endswith(DECKLIST_SUFFIX) and soup_player_name in filePath:
+				file_paths.append(filePath)
+	return file_paths
+
 def verifySoupDecklist(args):
 	verifyAllDecklistCardnames()
 	verifySingleDecklistForCardnames(args.filename)
 
 	print(args.soup_player)
 	print(args.filename)
+	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args.soup_player)
+	print(len(pantry_filepaths))
+	for decklist in pantry_filepaths:
+		print(decklist)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")
