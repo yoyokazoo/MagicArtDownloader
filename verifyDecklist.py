@@ -1,6 +1,7 @@
 import os
 import re
 import cards
+import argparse
 
 # add arg parsing to pass in a single decklist/folder of decklists
 DECKLIST_SUFFIX = ".txt"
@@ -10,6 +11,8 @@ DECKLIST_DIRECTORY_ROOT = "./decklists"
 
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+
+AUTO_REPLACE_THRESHOLD = 0.925
 
 # taken directly from https://www.datacamp.com/community/tutorials/fuzzy-string-python
 import numpy as np
@@ -108,6 +111,7 @@ def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 				replaceCardNameInDecklist(card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()], filePath)
 				continue
 
+			print("No matching card could be found for %s, checking similar names..." % card)
 			distances = {}
 			for leveshtein_card in cards.ALL_CARDNAMES:
 				leveshtein_distance = levenshtein_ratio_and_distance(card,leveshtein_card,ratio_calc = True)
@@ -115,7 +119,12 @@ def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 				#print("leveshtein_distance between %s and %s is %s" % (leveshtein_distance, card, leveshtein_card))
 			count = 0
 			replacement_choices = []
-			for key in sorted(distances, key=distances.get, reverse=True):
+			sorted_distances = sorted(distances, key=distances.get, reverse=True)
+			if distances[sorted_distances[0]] > AUTO_REPLACE_THRESHOLD:
+				print("Found similar cardname %s with a match of %s percent, auto-replacing" % (sorted_distances[0], str(round(distances[sorted_distances[0]]*100, 2))))
+				replaceCardNameInDecklist(card, sorted_distances[0], filePath)
+				continue
+			for key in sorted_distances:
 				replacement_choices.append(key)
 				count += 1
 				if count == 1:
@@ -140,6 +149,10 @@ def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 			else:
 				raise Exception("Invalid choice!")
 
+def verifySingleDecklistForCardnames(filePath):
+	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
+	verified = verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath)
+
 def verifyAllDecklistCardnames():
 	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 		for fileName in files:
@@ -147,8 +160,24 @@ def verifyAllDecklistCardnames():
 				continue
 			if fileName.endswith(DECKLIST_SUFFIX):
 				filePath = os.path.join(subDir, fileName)
-				combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
-				verified = verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath)
+				verifySingleDecklistForCardnames(filePath)
+
 	print("Done verifying decklists")
 
-verifyAllDecklistCardnames()
+def verifySoupDecklist(args):
+	verifyAllDecklistCardnames()
+	verifySingleDecklistForCardnames(args.filename)
+
+	print(args.soup_player)
+	print(args.filename)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")
+parser.add_argument('-f', '--filename', help="Filename of the decklist to check")
+args = parser.parse_args()
+print(args)
+
+if args.soup_player and args.filename:
+	verifySoupDecklist(args)
+else:
+	verifyAllDecklistCardnames()
