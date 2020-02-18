@@ -16,6 +16,9 @@ DOUBLE_FACED_CARD_DICTIONARY_PATH =  "./doubleFacedCardDict.txt"
 IMAGE_DIRECTORY_ROOT = "./magic_images"
 DECKLIST_DIRECTORY_ROOT = "./decklists"
 
+MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
+SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+
 
 RECOPY_IMAGES = True
 # todo: if format-specific land doesn't exist, just download the base version and make a copy with the format-specific version
@@ -133,6 +136,14 @@ def populateInitialDecklistDict(subDir, fileName):
 	decklistDict = {}
 	fileContents = open(os.path.join(subDir, fileName), 'r').read()
 	for line in fileContents.split("\n"):
+		maindeck_line = re.search(MAINDECK_REGEX, line)
+		if maindeck_line:
+			continue
+
+		sideboard_line = re.search(SIDEBOARD_REGEX, line)
+		if sideboard_line:
+			continue
+
 		matches = re.search("(\d*)x?(\s*)(.*)", line)
 		cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
 		cardName = matches.group(3)
