@@ -1,53 +1,75 @@
 import os
 import json
 
-NORMAL_CARDS_FILENAME = "AllCards.json"
-CUSTOM_CARDS_FILENAME = "CustomCards.json"
+class Cards:
+	NORMAL_CARDS_FILENAME = "AllCards.json"
+	CUSTOM_CARDS_FILENAME = "CustomCards.json"
 
-LAYOUTS_WITH_CUSTOM_NAMES = ["split", "aftermath"]
+	LAYOUTS_WITH_CUSTOM_NAMES = ["split", "aftermath"]
 
-def prepareCustomCardsJson():
-	if not os.path.isfile(CUSTOM_CARDS_FILENAME):
-		with open(CUSTOM_CARDS_FILENAME, 'w') as custom_cards_file:
-			json.dump({}, custom_cards_file)
+	def prepareCustomCardsJson(self):
+		if not os.path.isfile(self.customCardsFilePath):
+			with open(self.customCardsFilePath, 'w') as custom_cards_file:
+				json.dump({}, custom_cards_file)
 
-def addCardToCustomCards(cardname):
-	custom_cards_contents = None
-	with open(CUSTOM_CARDS_FILENAME, 'r', encoding="utf-8") as custom_cards_file:
-		custom_cards_contents = json.load(custom_cards_file)
+	def addCardToCustomCards(self, cardname, repopulateCardData=True):
+		custom_cards_contents = None
+		with open(self.customCardsFilePath, 'r', encoding="utf-8") as custom_cards_file:
+			custom_cards_contents = json.load(custom_cards_file)
 
-	if not custom_cards_contents.get(cardname):
-		custom_cards_contents[cardname] = {}
+		if not custom_cards_contents.get(cardname):
+			custom_cards_contents[cardname] = {}
 
-	with open(CUSTOM_CARDS_FILENAME, 'w', encoding="utf-8") as custom_cards_file:
-		json.dump(custom_cards_contents, custom_cards_file)
+		with open(self.customCardsFilePath, 'w', encoding="utf-8") as custom_cards_file:
+			json.dump(custom_cards_contents, custom_cards_file)
 
-def prepareSplitCards(cards_dict):
-	print("Preparing double-faced cards")
-	for cardname, card in cards_dict.items():
-		if card.get('side', "N/A") == 'a' and card['layout'] in LAYOUTS_WITH_CUSTOM_NAMES:
-			split_name = " // ".join(card['names'])
-			addCardToCustomCards(split_name)
+		# a bit heavy-handed to do a full repopulate but whatever
+		if repopulateCardData:
+			self.populateCardData()
 
-prepareCustomCardsJson()
+	def prepareSplitCards(self, cards_dict):
+		print("Preparing double-faced cards")
+		for cardname, card in cards_dict.items():
+			if card.get('side', "N/A") == 'a' and card['layout'] in self.LAYOUTS_WITH_CUSTOM_NAMES:
+				split_name = " // ".join(card['names'])
+				self.addCardToCustomCards(split_name, repopulateCardData=False)
 
-if not os.path.isfile(NORMAL_CARDS_FILENAME):
-		raise Exception("Couldn't find %s!  Download it from https://mtgjson.com/downloads/all-files/" % NORMAL_CARDS_FILENAME)
+	def populateCardData(self):
+		self.prepareCustomCardsJson()
 
-with open(NORMAL_CARDS_FILENAME, 'r', encoding="utf-8") as all_cards_file:
-	NORMAL_CARDS = json.load(all_cards_file)
+		if not os.path.isfile(self.normalCardsFilePath):
+				raise Exception("Couldn't find %s!  Download it from https://mtgjson.com/downloads/all-files/, or specify a directory for it" % normalCardsFilePath)
 
-prepareSplitCards(NORMAL_CARDS)
+		self.normal_cards = None
+		with open(self.normalCardsFilePath, 'r', encoding="utf-8") as all_cards_file:
+			self.normal_cards = json.load(all_cards_file)
 
-print("Loading cards jsons")
-with open(CUSTOM_CARDS_FILENAME, 'r', encoding="utf-8") as custom_cards_file:
-	CUSTOM_CARDS = json.load(custom_cards_file)
+		self.prepareSplitCards(self.normal_cards)
 
-ALL_CARDS = {}
-ALL_CARDS.update(CUSTOM_CARDS)
-ALL_CARDS.update(NORMAL_CARDS)
-ALL_CARDNAMES = ALL_CARDS.keys()
-ALL_LOWERCASE_CARDNAMES_DICT = {cardname.lower(): cardname for cardname in ALL_CARDNAMES}
-ALL_LOWERCASE_CARDNAMES = ALL_LOWERCASE_CARDNAMES_DICT.keys()
+		self.custom_cards = None
+		with open(self.customCardsFilePath, 'r', encoding="utf-8") as custom_cards_file:
+			self.custom_cards = json.load(custom_cards_file)
 
-print("Done loading cards json")
+		self.all_cards = {}
+		self.all_cards.update(self.normal_cards)
+		self.all_cards.update(self.custom_cards)
+		self.all_cardnames = self.all_cards.keys()
+		self.all_lowercase_cardnames_dict = {cardname.lower(): cardname for cardname in self.all_cardnames}
+		self.all_lowercase_cardnames = self.all_lowercase_cardnames_dict.keys()
+
+	def getAllCards(self):
+		return self.all_cards
+	def getAllCardnames(self):
+		return self.all_cardnames
+	def getAllLowercaseCardnamesDict(self):
+		return self.all_lowercase_cardnames_dict
+	def getAllLowercaseCardnames(self):
+		return self.all_lowercase_cardnames
+
+	def __init__(self, jsonDirectory):
+		self.normalCardsFilePath = os.path.join(jsonDirectory, Cards.NORMAL_CARDS_FILENAME)
+		self.customCardsFilePath = os.path.join(jsonDirectory, Cards.CUSTOM_CARDS_FILENAME)
+		
+		self.populateCardData()
+
+		print("Done loading cards json")

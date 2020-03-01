@@ -5,14 +5,28 @@ import argparse
 
 # add arg parsing to pass in a single decklist/folder of decklists
 DECKLIST_SUFFIX = ".txt"
-DECKLIST_DIR = "decklists/2019/BOOStandard/Kyle"
-DECKLIST_TO_CHECK = "_decklist.txt"
-DECKLIST_DIRECTORY_ROOT = ".%sdecklists" % os.path.sep
+
+DEFAULT_DECKLIST_DIRECTORY_ROOT = ".%sdecklists" % os.path.sep
+DEFAULT_JSON_DIRECTORY_ROOT  = ".%s" % os.path.sep
+
+def getDecklistDirectory(args):
+	if args and args.decklistDirectory:
+		return args.decklistDirectory
+	else:
+		return DEFAULT_DECKLIST_DIRECTORY_ROOT
+
+def getCardJsonDirectory(args):
+	if args and args.jsonDirectory:
+		return args.jsonDirectory
+	else:
+		return DEFAULT_JSON_DIRECTORY_ROOT
 
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
 
 AUTO_REPLACE_THRESHOLD = 0.925
+
+allCards = None
 
 # taken directly from https://www.datacamp.com/community/tutorials/fuzzy-string-python
 import numpy as np
@@ -101,19 +115,18 @@ def replaceCardNameInDecklist(oldCardName, newCardName, filePath):
 	with open(filePath, "w") as f:
 		f.write(fileContents)
 
-def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
-	#print("Verifying decklist %s %s" % (maindeckDict, sideboardDict))
-	for card in maindeckDict.keys():
+def verifyAndFixDecklistCardnames(combinedDict, filePath):
+	for card in combinedDict.keys():
 		#print("Checking card %s" % card)
-		if not card in cards.ALL_CARDNAMES:
-			if card.lower() in cards.ALL_LOWERCASE_CARDNAMES:
-				print("Fixing capitalization on %s to %s" % (card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()]))
-				replaceCardNameInDecklist(card, cards.ALL_LOWERCASE_CARDNAMES_DICT[card.lower()], filePath)
+		if not card in allCards.getAllCardnames():
+			if card.lower() in allCards.getAllLowercaseCardnames():
+				print("Fixing capitalization on %s to %s" % (card, allCards.getAllLowercaseCardnamesDict()[card.lower()]))
+				replaceCardNameInDecklist(card, allCards.getAllLowercaseCardnamesDict()[card.lower()], filePath)
 				continue
 
 			print("No matching card could be found for %s, checking similar names..." % card)
 			distances = {}
-			for leveshtein_card in cards.ALL_CARDNAMES:
+			for leveshtein_card in allCards.getAllCardnames():
 				leveshtein_distance = levenshtein_ratio_and_distance(card,leveshtein_card,ratio_calc = True)
 				distances[leveshtein_card] = leveshtein_distance
 				#print("leveshtein_distance between %s and %s is %s" % (leveshtein_distance, card, leveshtein_card))
@@ -143,7 +156,7 @@ def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 				replaceCardNameInDecklist(card, replacement_choices[choice-1], filePath)
 			elif choice == 6:
 				print("Adding %s to custom cards file" % card)
-				cards.addCardToCustomCards(card)
+				allCards.addCardToCustomCards(card)
 			elif choice == 7:
 				print("Skipping %s in %s, probably needs to be fixed in the file manually." % (card, filePath))
 			else:
@@ -151,10 +164,10 @@ def verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath):
 
 def verifySingleDecklistForCardnames(filePath):
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
-	verified = verifyAndFixDecklistCardnames(maindeckDict, sideboardDict, filePath)
+	verified = verifyAndFixDecklistCardnames(combinedDict, filePath)
 
-def verifyAllDecklistCardnames():
-	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
+def verifyAllDecklistCardnames(args):
+	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
 		for fileName in files:
 			if fileName == "TestCards.txt":
 				continue
@@ -164,27 +177,27 @@ def verifyAllDecklistCardnames():
 
 	print("Done verifying decklists")
 
-def findAllFilePathsWithSoupPlayerName(soup_player_name):
+def findAllFilePathsWithSoupPlayerName(args):
 	path_to_exclude = "Team Set Sealed"
 
 	file_paths = []
-	for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
+	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
 		for fileName in files:
 			filePath = os.path.join(subDir, fileName)
 			if path_to_exclude in filePath:
 				continue
-			if fileName.endswith(DECKLIST_SUFFIX) and soup_player_name in filePath:
+			if fileName.endswith(DECKLIST_SUFFIX) and args.soup_player in filePath:
 				file_paths.append(filePath)
 	return file_paths
 
 def verifySoupDecklist(args):
-	verifyAllDecklistCardnames()
+	verifyAllDecklistCardnames(args)
 	verifySingleDecklistForCardnames(args.filename)
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(args.filename)
 
 	print(args.soup_player)
 	print(args.filename)
-	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args.soup_player)
+	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args)
 	print(len(pantry_filepaths))
 	maindeck_decklists = []
 	sideboard_decklists = []
@@ -214,10 +227,14 @@ def verifySoupDecklist(args):
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")
 parser.add_argument('-f', '--filename', help="Filename of the decklist to check")
+parser.add_argument('-d', '--decklistDirectory', help="Directory of the source decklists to check")
+parser.add_argument('-j', '--jsonDirectory', help="Directory of the source json to check")
 args = parser.parse_args()
 print(args)
+
+allCards = cards.Cards(getCardJsonDirectory(args))
 
 if args.soup_player and args.filename:
 	verifySoupDecklist(args)
 else:
-	verifyAllDecklistCardnames()
+	verifyAllDecklistCardnames(args)
