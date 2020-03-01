@@ -180,13 +180,35 @@ def findAllFilePathsWithSoupPlayerName(soup_player_name):
 def verifySoupDecklist(args):
 	verifyAllDecklistCardnames()
 	verifySingleDecklistForCardnames(args.filename)
+	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(args.filename)
 
 	print(args.soup_player)
 	print(args.filename)
 	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args.soup_player)
 	print(len(pantry_filepaths))
-	for decklist in pantry_filepaths:
-		print(decklist)
+	maindeck_decklists = []
+	sideboard_decklists = []
+	for filePath in pantry_filepaths:
+		_, maindeck, sideboard = populateDecklistDicts(filePath)
+		maindeck_decklists.append(maindeck)
+		sideboard_decklists.append(sideboard)
+
+		print("\n-----------------------------------%s-----------------------------------\n" % filePath)
+		print("Maindeck (%d cards): \n%s" % (sum(maindeck.values()), maindeck))
+		print()
+		print("Sideboard (%d cards): \n%s" % (sum(sideboard.values()), sideboard))
+
+
+	print("\n\n")
+	print(maindeckDict)
+	print()
+	print(sideboardDict)
+
+
+	#print(maindeck_decklists)
+	#print(sideboard_decklists)
+
+
 
 
 parser = argparse.ArgumentParser()
