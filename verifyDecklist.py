@@ -268,6 +268,10 @@ def verifySoupDecklist(args):
 
 
 # Go through all the "well this card HAS to come from this set" options out of the way
+# If any options are now illegal -- AKA already used in 5 places in the final decklist, remove them from the remaining options
+# Keep repeating the above 2 steps until nothing changes
+# Pick a card, and assign a set to it
+# Repeat until no more cards to assign
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")
