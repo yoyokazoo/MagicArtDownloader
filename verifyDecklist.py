@@ -23,6 +23,8 @@ def getCardJsonDirectory(args):
 
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+REGEX_PATH_SEP = "\\\\" if os.path.sep == "\\" else os.path.sep
+FORMAT_NAME_REGEX = "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + DECKLIST_SUFFIX + "$"
 
 AUTO_REPLACE_THRESHOLD = 0.925
 
@@ -178,7 +180,7 @@ def verifyAllDecklistCardnames(args):
 	print("Done verifying decklists")
 
 def findAllFilePathsWithSoupPlayerName(args):
-	path_to_exclude = "Team Set Sealed"
+	path_to_exclude = "asfdasdfasdf"
 
 	file_paths = []
 	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
@@ -190,21 +192,36 @@ def findAllFilePathsWithSoupPlayerName(args):
 				file_paths.append(filePath)
 	return file_paths
 
+def getFormatNameFromFilePath(filePath):
+	formatNameMatches = re.search(FORMAT_NAME_REGEX, filePath)
+	formatName = formatNameMatches.group(1) if formatNameMatches else ""
+	return formatName
+
+def automaticallyAssignSetToCardIfPossible(soup_card, soup_decklist_dict, soup_options_dict, final_decklist):
+	differentSetsAvailable = len(set(soup_options_dict[soup_card]))
+	#print("%s has %d options available" % (soup_card, differentSetsAvailable))
+	if differentSetsAvailable == 1:
+		soup_decklist_dict[soup_card] -= 1
+		inner_options_array = final_decklist.get(soup_card, [])
+		inner_options_array.append(soup_options_dict[soup_card].pop())
+		final_decklist[soup_card] = inner_options_array
+
+
 def verifySoupDecklist(args):
 	verifyAllDecklistCardnames(args)
 	verifySingleDecklistForCardnames(args.filename)
-	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(args.filename)
+	soupCombinedDict, soupMaindeckDict, soupSideboardDict = populateDecklistDicts(args.filename)
 
 	print(args.soup_player)
 	print(args.filename)
 	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args)
 	print(len(pantry_filepaths))
-	maindeck_decklists = []
-	sideboard_decklists = []
+	maindeck_decklists = {}
+	sideboard_decklists = {}
 	for filePath in pantry_filepaths:
 		_, maindeck, sideboard = populateDecklistDicts(filePath)
-		maindeck_decklists.append(maindeck)
-		sideboard_decklists.append(sideboard)
+		maindeck_decklists[filePath] = maindeck
+		sideboard_decklists[filePath] = sideboard
 
 		print("\n-----------------------------------%s-----------------------------------\n" % filePath)
 		print("Maindeck (%d cards): \n%s" % (sum(maindeck.values()), maindeck))
@@ -212,17 +229,45 @@ def verifySoupDecklist(args):
 		print("Sideboard (%d cards): \n%s" % (sum(sideboard.values()), sideboard))
 
 
-	print("\n\n")
-	print(maindeckDict)
-	print()
-	print(sideboardDict)
+	print("\n\n%s\n%s\n" % (soupMaindeckDict, soupSideboardDict))
 
+	soup_options_dict = {}
+	for soup_card, soup_card_count in soupMaindeckDict.items():
+		if soup_card in cards.BASIC_LAND_NAMES:
+			continue
+		#print("%s%s" % (soup_card, soup_card_count))
+		for maindeck_decklist_filepath, maindeck_decklist in maindeck_decklists.items():
+			if soup_card in maindeck_decklist:
+				# dict method
+				# inner_options_dict = soup_options_dict.get(soup_card, {})
+				# inner_options_dict[getFormatNameFromFilePath(maindeck_decklist_filepath)] = maindeck_decklist[soup_card]
+				# soup_options_dict[soup_card] = inner_options_dict
+				# array method
+				inner_options_array = soup_options_dict.get(soup_card, [])
+				for count in range(maindeck_decklist[soup_card]):
+					inner_options_array.append(getFormatNameFromFilePath(maindeck_decklist_filepath))
+				soup_options_dict[soup_card] = inner_options_array
+
+	#print(soup_options_dict)
+
+	final_decklist = {}
+	for soup_card, soup_card_options in soup_options_dict.items():
+		print(soup_card, soup_card_options)
+
+	for soup_card, soup_card_count in soupMaindeckDict.items():
+		if soup_card in cards.BASIC_LAND_NAMES:
+			continue
+
+		for inner_card_count in range(soup_card_count):
+			automaticallyAssignSetToCardIfPossible(soup_card, soupMaindeckDict, soup_options_dict, final_decklist)
+
+	print("\n\n%s\n\n%s\n\n%s\n\n" % (final_decklist, soup_options_dict, soupMaindeckDict))
 
 	#print(maindeck_decklists)
 	#print(sideboard_decklists)
 
 
-
+# Go through all the "well this card HAS to come from this set" options out of the way
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")

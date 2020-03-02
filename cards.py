@@ -1,6 +1,8 @@
 import os
 import json
 
+BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+
 class Cards:
 	NORMAL_CARDS_FILENAME = "AllCards.json"
 	CUSTOM_CARDS_FILENAME = "CustomCards.json"
