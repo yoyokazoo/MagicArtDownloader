@@ -124,7 +124,7 @@ def verifyAndFixDecklistCardnames(combinedDict, filePath):
 				replaceCardNameInDecklist(card, allCards.getAllLowercaseCardnamesDict()[card.lower()], filePath)
 				continue
 
-			print("No matching card could be found for %s, checking similar names..." % card)
+			print("No matching card could be found for %s (%s), checking similar names..." % (card, filePath))
 			distances = {}
 			for leveshtein_card in allCards.getAllCardnames():
 				leveshtein_distance = levenshtein_ratio_and_distance(card,leveshtein_card,ratio_calc = True)
@@ -142,7 +142,7 @@ def verifyAndFixDecklistCardnames(combinedDict, filePath):
 				count += 1
 				if count == 1:
 					print("\n-------------------------------------------------------\n")
-					print("Couldn't find cardname %s. Here are the closest five cardnames: \n" % card)
+					print("Couldn't find cardname %s (%s). Here are the closest five cardnames: \n" % (card, filePath))
 				print("%s) %s %s" % (count, key, distances[key]))
 				if count == 5:
 					break
