@@ -318,7 +318,7 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 			needToRerunLoop = True
 
 		if not downloadSuccess:
-			unfoundCardDict[imageNameToCheck] = fileName
+			unfoundCardDict[imageNameToCheck] = os.path.join(subDir, fileName)
 			print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % cardName)
 			# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
 
