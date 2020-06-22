@@ -6,8 +6,19 @@ import urllib.request
 import string
 
 # todo: Move all the scryfall-specific stuff to its own file to allow for scraping from other sites, keep this code relatively clean, etc.
-URL_PREFIX = "https://scryfall.com/search?q=!%27";
-URL_SUFFIX = "%27&v=card&s=cname";
+URL_PREFIX = "https://scryfall.com/search?as=grid&dir=asc&order=released&q=%21%22";
+URL_SUFFIX = "%22&unique=prints";
+
+IMAGE_IN_SOURCE_REGEX = "\s*<img class.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*"
+
+CARD_SETS_TO_IGNORE = [
+	"PWP09", "PWP10", "PWP11", "PWP12", # planeswalker packs
+	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
+	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
+	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
+	"PM15", "PG08",
+	"PSOM", "PSAL", "PS15", "JGP" # other
+]
 
 IMAGE_SUFFIX = ".jpg"
 DECKLIST_SUFFIX = ".txt"
@@ -200,7 +211,7 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 				suffixNum += 1
 
 def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
-	#print("Download single card image -- cardName = %s, imageNameToCheck = %s" % (cardName))
+	#print("Download single card image -- cardName = %s" % (cardName))
 	downloadSuccess = False
 	needToRerunLoop = False
 
@@ -212,12 +223,15 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 	lines = webContent.split("\\n")
 	#print("Split downloaded webcontent into %d lines" % len(lines))
 	for lineIndex in range(len(lines)):
+		if downloadSuccess:
+			continue
+
 		line = lines[lineIndex]
 		# Example lines
 		#          <img class="card a25 border-black" alt="" title="Savannah Lions (A25)" src="https://img.scryfall.com/cards/large/en/a25/33.jpg?1521724798" />
 		#          <img class="card isd border-black" alt="" title="Delver of Secrets // Insectile Aberration (ISD)" data-rotate="flip-backside" src="https://img.scryfall.com/cards/large/front/1/1/11bf83bb-c95b-4b4f-9a56-ce7a1816307a.jpg?1545407245" />
 		#          <img class="card uma border-black" alt="" title="Fire // Ice (UMA)" data-rotate="rotate-90cw" src="https://img.scryfall.com/cards/large/front/3/f/3f822331-315e-4297-bb69-f1069032c6c5.jpg?1547518354" />
-		matches = re.search("\s*<img class.*title=\"(.*?)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*", line)
+		matches = re.search(IMAGE_IN_SOURCE_REGEX, line)
 
 		cardTitle = None
 		isWeirdCardType = None
@@ -225,19 +239,21 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 		imgUrl = None
 		if matches:
 			cardTitle = matches.group(1)
-			isWeirdCardType = matches.group(2)
-			weirdCardType = matches.group(3)
-			imgUrl = matches.group(4)
+			cardSet = matches.group(2)
+			isWeirdCardType = matches.group(3)
+			weirdCardType = matches.group(4)
+			imgUrl = matches.group(5)
 
 			imgUrlLastChar = imgUrl[-5]
 			backInImgUrl = "back" in imgUrl
 			isBackImage = imgUrlLastChar == 'b' or backInImgUrl # this feels fragile, but such is the fate of screen scraping
 
-			#print("\ncardName = %s\ncardTitle = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
+			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
-			if (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage):
+			if (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage) or cardSet in CARD_SETS_TO_IGNORE:
 				pass # if-statement was more readable this way
 			else:
+				print("Downloading %s" % imgUrl)
 				imgRequest = urllib.request.Request(imgUrl, headers=headers)
 				imgData = urllib.request.urlopen(imgRequest).read()
 
@@ -248,6 +264,7 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 				outputImage.close()
 				existingImageDict[newCardImageFileName.lower()] = True
 				downloadSuccess = True
+				#print("Download success")
 
 		doubleFaced = weirdCardType == "flip-backside"
 
@@ -255,7 +272,7 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 		if(doubleFaced and (not isPartOfDoubleFacedCardDict(doubleFacedCardDict, cardName))):
 			print("Found a double faced card '%s' that isn't part of the double faced card dictionary. Re-running download loop with updated decklist" % cardName)
 			# Delver of Secrets // Insectile Aberration (ISD)
-			cardTitleMatches = re.search(".*// (.*) \(...\)", cardTitle)
+			cardTitleMatches = re.search(".*// (.*)", cardTitle)
 			backFaceName = cardTitleMatches.group(1)
 			#print("Back face name %s" % backFaceName)
 
