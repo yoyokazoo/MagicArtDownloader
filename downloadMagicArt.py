@@ -16,8 +16,8 @@ CARD_SETS_TO_IGNORE = [
 	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
 	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
 	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
-	"PM15", "PG08",
-	"PSOM", "PSAL", "PS15", "JGP" # other
+	"PM15", "PG08", "PPRE",
+	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
 IMAGE_SUFFIX = ".jpg"
