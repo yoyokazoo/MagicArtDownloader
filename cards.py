@@ -40,7 +40,7 @@ class Cards:
 		self.prepareCustomCardsJson()
 
 		if not os.path.isfile(self.normalCardsFilePath):
-				raise Exception("Couldn't find %s!  Download it from https://mtgjson.com/downloads/all-files/, or specify a directory for it" % normalCardsFilePath)
+				raise Exception("Couldn't find %s!  Download it from https://mtgjson.com/downloads/all-files/, or specify a directory for it" % self.normalCardsFilePath)
 
 		self.normal_cards = None
 		with open(self.normalCardsFilePath, 'r', encoding="utf-8") as all_cards_file:

@@ -1,0 +1,11 @@
+{
+	"Brian": {"ARN": "Jesse", "NEM": "David", "ONS": "Peter", "AER": "Max", "ALA": "Jesse", "KTK": "David", "TSP": "Steven", "TSB": "Steven"},
+	"David": {"ATQ": "Peter", "SCG": "Kyle", "LEG": "Kyle", "ARB": "Max", "ODY": "Zac", "XLN": "Zaiem", "CON": "Zac"},
+	"Jesse": {"SOK": "Zac", "CSP": "Zaiem", "DKA": "David", "VIS": "Steven", "AKH": "Max", "APC": "Max", "DTK": "Peter"},
+	"Kyle": {"PLS": "David", "BOK": "Steven", "EVE": "Steven", "FRF": "Peter", "HOU": "Jesse", "CHK": "Brian", "GTC": "Peter"},
+	"Max": {"LGN": "Brian", "BNG": "Zac", "INV": "Brian", "MOR": "Zac", "GPT": "David", "MIR": "Brian", "EMN": "Jesse"},
+	"Peter": {"DRK": "Zaiem", "JUD": "Brian", "SHM": "Jesse", "DGM": "Brian", "ICE": "Zaiem", "DIS": "Kyle", "RNA": "David"},
+	"Steven": {"PCY": "Max", "WTH": "Kyle", "TOR": "Zaiem", "EXO": "Zaiem", "OGW": "Peter", "DST": "Jesse", "THS": "Kyle"},
+	"Zac": {"HML": "Steven", "PLC": "Jesse", "RIX": "Max", "5DN": "David", "AVR": "Steven", "ULG": "Steven", "RAV": "Zaiem"},
+	"Zaiem": {"FEM": "Brian", "ALL": "Peter", "JOU": "Zac", "STH": "Kyle", "MMQ": "Kyle", "UDS": "Zac", "TMP": "Brian"}
+}
