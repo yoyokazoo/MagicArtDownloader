@@ -2,7 +2,7 @@ AllCards.json
 CustomCards.json
 doubleFacedCardDict.txt
 decklists/2*/
-magic_images/*.jpg
+magic_images*/*.jpg
 decklists/**/*.jpg
 
 ## Ignore Visual Studio temporary files, build results, and

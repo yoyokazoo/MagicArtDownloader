@@ -71,6 +71,12 @@ def fixCardName(cardName, formatName):
 		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
 		return newCardName
 
+	# Circle of Protection: Blue into Circle of Protection Blue
+	colonCardName = re.search("([^:]*):\s*([^:]*)", cardName)
+	if colonCardName:
+		newCardName = colonCardName.group(1).capitalize() + "_" + colonCardName.group(2).capitalize()
+		return newCardName
+
 	# Convert Plains into PlainsModern, PlainsStandard, PlainsTestCard etc.
 	# so you can associate different basic land arts with different decklists
 	#print("Card name: %s Format name: %s" % (cardName, formatName))
@@ -296,7 +302,7 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 
 		# check if file already exists in current directory
 		cardName = fixCardName(initialCardName, formatName)
-		#print("Fixed cardName %s" % cardName)
+		print("Fixed cardName %s" % cardName)
 
 		imageNameToCheck = cardName + IMAGE_SUFFIX
 		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
