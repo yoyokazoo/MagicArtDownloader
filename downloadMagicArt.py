@@ -302,7 +302,7 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 
 		# check if file already exists in current directory
 		cardName = fixCardName(initialCardName, formatName)
-		print("Fixed cardName %s" % cardName)
+		#print("Fixed cardName %s" % cardName)
 
 		imageNameToCheck = cardName + IMAGE_SUFFIX
 		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
