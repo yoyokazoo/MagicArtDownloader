@@ -16,7 +16,7 @@ CARD_SETS_TO_IGNORE = [
 	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
 	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
 	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
-	"PM15", "PG08", "PPRE",
+	"PM15", "PG08", "PPRE", "PM11",
 	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
@@ -163,7 +163,7 @@ def populateInitialDecklistDict(subDir, fileName):
 
 		matches = re.search("(\d*)x?(\s*)(.*)", line)
 		cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
-		cardName = matches.group(3)
+		cardName = matches.group(3).strip()
 
 		if cardName:
 			decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
