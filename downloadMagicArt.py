@@ -69,19 +69,21 @@ def fixCardName(cardName, formatName):
 	splitCardName = re.search("^(\S*?)\s*\/\/?\s*(\S*)", cardName)
 	if splitCardName:
 		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
-		return newCardName
+		return newCardName # should be cardName = newCardName so we can fix all screwups?
 
 	# Circle of Protection: Blue into Circle of Protection Blue
 	colonCardName = re.search("([^:]*):\s*([^:]*)", cardName)
 	if colonCardName:
 		newCardName = colonCardName.group(1).capitalize() + "_" + colonCardName.group(2).capitalize()
-		return newCardName
+		return newCardName # should be cardName = newCardName so we can fix all screwups?
 
 	# Convert Plains into PlainsModern, PlainsStandard, PlainsTestCard etc.
 	# so you can associate different basic land arts with different decklists
 	#print("Card name: %s Format name: %s" % (cardName, formatName))
 	if USE_FORMAT_SPECIFIC_LANDS and cardName in BASIC_LAND_NAMES:
 		cardName = cardName + formatName
+
+	cardName = cardName.replace("â€™", "")
 
 	return cardName
 
