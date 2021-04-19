@@ -30,6 +30,8 @@ DECKLIST_DIRECTORY_ROOT = "./decklists"
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
 
+SET_CODE_REGEX = "\s*(\((\w\w\w)\))$"
+
 
 RECOPY_IMAGES = True
 # todo: if format-specific land doesn't exist, just download the base version and make a copy with the format-specific version
@@ -87,7 +89,14 @@ def fixCardName(cardName, formatName):
 
 	return cardName
 
-def getUrlSanitizedCardname(cardName):
+def getUrlSanitizedCardnameAndSet(cardName):
+	set_code = None
+	set_code_match = re.search(SET_CODE_REGEX, cardName)
+	if set_code_match:
+		set_code_text = set_code_match.group(1)
+		set_code = set_code_match.group(2)
+		cardName = cardName[:-len(set_code_text)]
+
 	# https://www.degraeve.com/reference/specialcharacters.php
 	cardName = cardName.replace("'", "")
 	cardName = cardName.replace("(", "%28")
@@ -97,7 +106,7 @@ def getUrlSanitizedCardname(cardName):
 	cardName = cardName.replace(":", "%3A")
 	cardName = cardName.replace(" ", "+")
 	cardName = cardName.replace("_", "//") # change Fire_Ice to Fire//Ice
-	return cardName
+	return cardName, set_code
 
 def addDoubleFacedCardsToDict(decklistDict):
 	cardsToAdd = {}
@@ -223,8 +232,9 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 	downloadSuccess = False
 	needToRerunLoop = False
 
-	url = URL_PREFIX + getUrlSanitizedCardname(cardName) + URL_SUFFIX
-	#print("Checking URL %s" % url)
+	sanitized_cardname, set_code = getUrlSanitizedCardnameAndSet(cardName)
+	url = URL_PREFIX + sanitized_cardname + URL_SUFFIX
+	print("Checking URL %s" % url)
 	response = urllib.request.urlopen(url)
 	webContent = str(response.read())
 	#print("webContent = %s" % webContent)
@@ -258,7 +268,7 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 
 			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
-			if (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage) or cardSet in CARD_SETS_TO_IGNORE:
+			if (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage) or cardSet in CARD_SETS_TO_IGNORE or (set_code and cardSet != set_code):
 				pass # if-statement was more readable this way
 			else:
 				print("Downloading %s" % imgUrl)
