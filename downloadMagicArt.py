@@ -30,7 +30,7 @@ DECKLIST_DIRECTORY_ROOT = "./decklists"
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
 
-SET_CODE_REGEX = "\s*(\((\w\w\w)\))$"
+SET_CODE_REGEX = "(\s*\((\w\w\w)\))$"
 
 
 RECOPY_IMAGES = True
@@ -71,13 +71,13 @@ def fixCardName(cardName, formatName):
 	splitCardName = re.search("^(\S*?)\s*\/\/?\s*(\S*)", cardName)
 	if splitCardName:
 		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
-		return newCardName # should be cardName = newCardName so we can fix all screwups?
+		cardName = newCardName # should be cardName = newCardName so we can fix all screwups?
 
 	# Circle of Protection: Blue into Circle of Protection Blue
 	colonCardName = re.search("([^:]*):\s*([^:]*)", cardName)
 	if colonCardName:
 		newCardName = colonCardName.group(1).capitalize() + "_" + colonCardName.group(2).capitalize()
-		return newCardName # should be cardName = newCardName so we can fix all screwups?
+		cardName = newCardName # should be cardName = newCardName so we can fix all screwups?
 
 	# Convert Plains into PlainsModern, PlainsStandard, PlainsTestCard etc.
 	# so you can associate different basic land arts with different decklists
@@ -86,6 +86,7 @@ def fixCardName(cardName, formatName):
 		cardName = cardName + formatName
 
 	cardName = cardName.replace("â€™", "")
+	cardName = cardName.replace("\t", " ")
 
 	return cardName
 
