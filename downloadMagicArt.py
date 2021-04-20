@@ -14,9 +14,10 @@ IMAGE_IN_SOURCE_REGEX = "\s*<img class.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=
 CARD_SETS_TO_IGNORE = [
 	"PWP09", "PWP10", "PWP11", "PWP12", # planeswalker packs
 	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
+	"V17", # from the vault
 	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
 	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
-	"PM15", "PG08", "PPRE", "PM11",
+	"PM15", "PG08", "PPRE", "PM11", "POGW",
 	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
@@ -269,7 +270,13 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 
 			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
-			if (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage) or cardSet in CARD_SETS_TO_IGNORE or (set_code and cardSet != set_code):
+			incorrect_double_faced_side = (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage)
+			incorrect_set_code = (set_code and cardSet != set_code)
+			ignore_this_set = cardSet in CARD_SETS_TO_IGNORE and not set_code
+			
+			skip_download = incorrect_double_faced_side or incorrect_set_code or ignore_this_set
+
+			if skip_download:
 				pass # if-statement was more readable this way
 			else:
 				print("Downloading %s" % imgUrl)
@@ -296,6 +303,9 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 			#print("Back face name %s" % backFaceName)
 
 			if backFaceName:
+				if(set_code):
+					backFaceName = backFaceName + "(" + set_code + ")"
+
 				with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'a+') as doubleFacedCardFile:
 					doubleFacedCardFile.write(cardName + "\n")
 					doubleFacedCardFile.write(backFaceName + "\n")

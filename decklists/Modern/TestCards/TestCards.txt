@@ -8,6 +8,8 @@ Delver of Secrets
 2 Delver of Secrets
 2x Delver of Secrets
 0x Delver of Secrets
+Delver of Secrets (ISD)
+Delver of Secrets (V17)
 Plains
 Circle of Protection: Blue
 Palladia Mors	
@@ -15,6 +17,7 @@ Emeria’s Call
 Lightning Bolt (2ED)
 Lightning Bolt (M10) 
 4	Vexing Devil	(AVR)
+Daybreak Ranger (ISD)
 
 Search for Azcanta
 Arguel's Blood Fast
