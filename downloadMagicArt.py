@@ -226,7 +226,7 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 		if not unfoundCardDict.get(imageNameToCheck, False):
 			suffixNum = 1
 			while suffixNum <= cardCount:
-				shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, cardName + "_" + str(suffixNum) + IMAGE_SUFFIX))
+				shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, formatName + "_" + cardName + "_" + str(suffixNum) + IMAGE_SUFFIX))
 				suffixNum += 1
 
 def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):

@@ -16,8 +16,7 @@ Palladia Mors
 Emeria’s Call
 Lightning Bolt (2ED)
 Lightning Bolt (M10) 
-4	Vexing Devil	(AVR)
-Daybreak Ranger (ISD)
+2	Vexing Devil	(AVR)
 
 Search for Azcanta
 Arguel's Blood Fast
