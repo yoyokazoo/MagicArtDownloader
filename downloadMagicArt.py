@@ -12,12 +12,13 @@ URL_SUFFIX = "%22&unique=prints";
 IMAGE_IN_SOURCE_REGEX = "\s*<img class.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*"
 
 CARD_SETS_TO_IGNORE = [
+	"PW12",
 	"PWP09", "PWP10", "PWP11", "PWP12", # planeswalker packs
 	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
 	"V17", # from the vault
 	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
 	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
-	"PM15", "PG08", "PPRE", "PM11", "POGW",
+	"PM15", "PG08", "PPRE", "PM11", "POGW", "PJOU", "PDKA", "PISD",
 	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
