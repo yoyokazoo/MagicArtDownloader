@@ -1,11 +1,13 @@
 AllCards.json
 CustomCards.json
-doubleFacedCardDict.txt
 DecklistImages.zip
+CombinedDecklistImages.zip
+CombinedDecklists.zip
 decklists/*
 !decklists/Modern/TestCards/TestCards.txt
 magic_images*/*.jpg
-zipped/*
+zippedDecklists/*
+zippedImages/*
 images_to_keep/*
 
 ## Ignore Visual Studio temporary files, build results, and

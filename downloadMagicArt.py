@@ -18,7 +18,7 @@ CARD_SETS_TO_IGNORE = [
 	"V17", # from the vault
 	"EXP", "MPS", "MP2", # expeditions/masterpieces/invocations
 	"PAL99", "PAL00", "PAL01", "PAL02", "PAL03", "PAL04", "PAL05", "PAL06", # arena league
-	"PM15", "PG08", "PPRE", "PM11", "POGW", "PJOU", "PDKA", "PISD",
+	"PM15", "PG08", "PPRE", "PM11", "POGW", "PJOU", "PDKA", "PISD", "PPLS", "PAVR", # should just disallow 4 digit set codes that start with P
 	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
