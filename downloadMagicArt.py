@@ -9,10 +9,10 @@ import string
 URL_PREFIX = "https://scryfall.com/search?as=grid&dir=asc&order=released&q=%21%22";
 URL_SUFFIX = "%22&unique=prints";
 
-IMAGE_IN_SOURCE_REGEX = "\s*<img class.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*"
+IMAGE_IN_SOURCE_REGEX = "\s*<img class=\"card (.*?) border.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*"
 
 CARD_SETS_TO_IGNORE = [
-	"PW12",
+	"PW12", "P09",
 	"PWP09", "PWP10", "PWP11", "PWP12", # planeswalker packs
 	"F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", # friday night magic
 	"V17", # from the vault
@@ -259,21 +259,22 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 		weirdCardType = None
 		imgUrl = None
 		if matches:
-			cardTitle = matches.group(1)
-			cardSet = matches.group(2)
-			isWeirdCardType = matches.group(3)
-			weirdCardType = matches.group(4)
-			imgUrl = matches.group(5)
+			shortSetCode = matches.group(1).upper()
+			cardTitle = matches.group(2)
+			cardSet = matches.group(3)
+			isWeirdCardType = matches.group(4)
+			weirdCardType = matches.group(5)
+			imgUrl = matches.group(6)
 
 			imgUrlLastChar = imgUrl[-5]
 			backInImgUrl = "back" in imgUrl
 			isBackImage = imgUrlLastChar == 'b' or backInImgUrl # this feels fragile, but such is the fate of screen scraping
 
-			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
+			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nshortSetCode = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, shortSetCode, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
 
 			incorrect_double_faced_side = (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage)
-			incorrect_set_code = (set_code and cardSet != set_code)
-			ignore_this_set = cardSet in CARD_SETS_TO_IGNORE and not set_code
+			incorrect_set_code = (set_code and shortSetCode != set_code)
+			ignore_this_set = shortSetCode in CARD_SETS_TO_IGNORE and not set_code
 			
 			skip_download = incorrect_double_faced_side or incorrect_set_code or ignore_this_set
 
