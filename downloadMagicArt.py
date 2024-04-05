@@ -38,6 +38,7 @@ SET_CODE_REGEX = "(\s*\((\w\w\w)\))$"
 RECOPY_IMAGES = True
 # todo: if format-specific land doesn't exist, just download the base version and make a copy with the format-specific version
 USE_FORMAT_SPECIFIC_LANDS = True
+DO_MPCFILL_POSTPROCESSING = True
 
 # urllib2 junk
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
@@ -230,6 +231,22 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 				shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, formatName + "_" + cardName + "_" + str(suffixNum) + IMAGE_SUFFIX))
 				suffixNum += 1
 
+def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName):
+	# iterate through dictionary again, copying over as many copies as the decklist specifies
+	for initialCardName, cardCount in decklistDict.items():
+		cardName = fixCardName(initialCardName, formatName)
+		imageNameToCheck = cardName + IMAGE_SUFFIX
+
+		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+			pass # format-specific art exists
+		elif USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
+			print("Couldn't find '%s' in the magic images folder or existing images dict.  Using the default %s instead" % (cardName, initialCardName))
+			cardName = initialCardName
+			imageNameToCheck = cardName + IMAGE_SUFFIX
+
+		if not unfoundCardDict.get(imageNameToCheck, False):
+			shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, cardName + IMAGE_SUFFIX))
+
 def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 	#print("Download single card image -- cardName = %s" % (cardName))
 	downloadSuccess = False
@@ -378,7 +395,10 @@ for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 				decklistDict = populateInitialDecklistDict(subDir, fileName)
 				runLoop = downloadMissingCardImages(decklistDict, unfoundCardDict)
 
-			copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, files, formatName)
+			if DO_MPCFILL_POSTPROCESSING:
+				copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
+			else:
+				copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, files, formatName)
 
 # print out unfound cards
 if len(unfoundCardDict) == 0:
