@@ -5,6 +5,9 @@ import shutil
 import urllib.request
 import string
 
+# pip install pillow
+from PIL import Image
+
 # todo: Move all the scryfall-specific stuff to its own file to allow for scraping from other sites, keep this code relatively clean, etc.
 URL_PREFIX = "https://scryfall.com/search?as=grid&dir=asc&order=released&q=%21%22";
 URL_SUFFIX = "%22&unique=prints";
@@ -22,7 +25,7 @@ CARD_SETS_TO_IGNORE = [
 	"PNPH", "PMBS", "PRTR", "PSOM", "PSAL", "PS15", "JGP" # other
 ]
 
-IMAGE_SUFFIX = ".jpg"
+IMAGE_SUFFIX = ".png"
 DECKLIST_SUFFIX = ".txt"
 
 DOUBLE_FACED_CARD_DICTIONARY_PATH =  "./doubleFacedCardDict.txt"
@@ -47,6 +50,35 @@ headers = { 'User-Agent' : user_agent }
 
 
 BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+
+def reprocessImageForMPCFill(oldImagePath, newImagePath):
+	# Thanks ChatGPT, I'm lazy!
+	# Open the original image
+	original_image = Image.open(oldImagePath)
+
+	# Calculate the coordinates for cropping
+	left = (original_image.width - 686) // 2
+	top = (original_image.height - 976) // 2
+	right = left + 686
+	bottom = top + 976
+
+	# Crop the image
+	cropped_image = original_image.crop((left, top, right, bottom))
+
+	# Create a new black image
+	new_image = Image.new('RGB', (816, 1110), (0, 0, 0))
+
+	# Calculate the coordinates for pasting
+	paste_left = (new_image.width - cropped_image.width) // 2
+	paste_top = (new_image.height - cropped_image.height) // 2
+	paste_right = paste_left + cropped_image.width
+	paste_bottom = paste_top + cropped_image.height
+
+	# Paste the cropped image onto the black image
+	new_image.paste(cropped_image, (paste_left, paste_top))
+
+	# Save the new image
+	new_image.save(newImagePath)
 
 def isPartOfDoubleFacedCardDict(doubleFacedCardDict, cardName):
 	for frontName, backName in doubleFacedCardDict.items():
@@ -228,7 +260,9 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 		if not unfoundCardDict.get(imageNameToCheck, False):
 			suffixNum = 1
 			while suffixNum <= cardCount:
-				shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, formatName + "_" + cardName + "_" + str(suffixNum) + IMAGE_SUFFIX))
+				oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX)
+				newImagePath = os.path.join(subDir, formatName + "_" + cardName + "_" + str(suffixNum) + IMAGE_SUFFIX)
+				shutil.copy(oldImagePath, newImagePath)
 				suffixNum += 1
 
 def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName):
@@ -245,7 +279,9 @@ def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, su
 			imageNameToCheck = cardName + IMAGE_SUFFIX
 
 		if not unfoundCardDict.get(imageNameToCheck, False):
-			shutil.copy(os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX), os.path.join(subDir, cardName + IMAGE_SUFFIX))
+			oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX)
+			newImagePath = os.path.join(subDir, cardName + IMAGE_SUFFIX)
+			reprocessImageForMPCFill(oldImagePath, newImagePath)
 
 def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 	#print("Download single card image -- cardName = %s" % (cardName))
@@ -298,6 +334,10 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 			if skip_download:
 				pass # if-statement was more readable this way
 			else:
+				# NORMAL (low res) imgUrl: https://cards.scryfall.io/normal/front/b/0/b0faa7f2-b547-42c4-a810-839da50dadfe.jpg?1559591477
+				# PNG (high res) imgUrl:   https://cards.scryfall.io/png/front/b/0/b0faa7f2-b547-42c4-a810-839da50dadfe.png?1559591477
+				imgUrl = imgUrl.replace("https://cards.scryfall.io/normal", "https://cards.scryfall.io/png")
+				imgUrl = imgUrl.replace(".jpg", ".png")
 				print("Downloading %s" % imgUrl)
 				imgRequest = urllib.request.Request(imgUrl, headers=headers)
 				imgData = urllib.request.urlopen(imgRequest).read()
