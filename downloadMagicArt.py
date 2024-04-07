@@ -8,6 +8,9 @@ import string
 # pip install pillow
 from PIL import Image
 
+
+import xml.etree.ElementTree as ET
+
 # todo: Move all the scryfall-specific stuff to its own file to allow for scraping from other sites, keep this code relatively clean, etc.
 URL_PREFIX = "https://scryfall.com/search?as=grid&dir=asc&order=released&q=%21%22";
 URL_SUFFIX = "%22&unique=prints";
@@ -47,9 +50,115 @@ DO_MPCFILL_POSTPROCESSING = True
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
 headers = { 'User-Agent' : user_agent }
 
-
-
 BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+
+MPC_FILL_BRACKETS = [18, 36, 55, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 396, 504, 612]
+MPC_FILL_CARDBACK = "1lZX4vyveCm_h-bAzvvgK1d-T60dG-OtJ"
+MPC_FILL_PLACEHOLDER_ID = "1Cw1NnGISzJPWL-PrhgpexiuIdPhHiasc"
+
+def getMPCFillBracket(quantity):
+	for bracket in MPC_FILL_BRACKETS:
+		if bracket > quantity:
+			return bracket
+
+	print("*******************************************************")
+	print("*** ERROR: Card quantity exceeded max bracket size ****")
+	print("*******************************************************")
+
+	return bracket[-1]
+
+def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, formatName):
+
+	frontDecklistDict = {}
+	for card_name, card_count in decklistDict.items():
+		if not isDoubleFacedBackFace(doubleFacedCardDict, card_name):
+			frontDecklistDict[card_name] = card_count
+
+	# Create the root element
+	root = ET.Element("order")
+
+	cardCountTotal = sum(frontDecklistDict.values())
+
+	details = ET.Element("details")
+	quantity = ET.Element("quantity")
+	bracket = ET.Element("bracket")
+	stock = ET.Element("stock")
+	foil = ET.Element("foil")
+
+	quantity.text = str(cardCountTotal)
+	bracket.text = str(getMPCFillBracket(cardCountTotal))
+	stock.text = "(S30) Standard Smooth"
+	foil.text = "false"
+
+	details.append(quantity)
+	details.append(bracket)
+	details.append(stock)
+	details.append(foil)
+
+	root.append(details)
+
+	# Iterate over the dictionary
+	fronts = ET.Element("fronts")
+	backs = ET.Element("backs")
+	runningOffset = 0
+	for card_name, card_count in frontDecklistDict.items():
+		# Create the <card> element
+		card_element = ET.Element("card")
+
+		# Just give it a nonsense id so I don't have to make changes to the uploader
+		id_element = ET.Element("id")
+		id_element.text = MPC_FILL_PLACEHOLDER_ID
+
+		# Create the <slots> element and set its text
+		slots_element = ET.Element("slots")
+		slots = ",".join(str(i) for i in range(runningOffset, runningOffset + card_count))
+		slots_element.text = slots
+
+		# Create the <name> element and set its text
+		name_element = ET.Element("name")
+		name_element.text = fixCardName(card_name, formatName) + IMAGE_SUFFIX
+
+		runningOffset += card_count
+
+		if isDoubleFacedFrontFace(doubleFacedCardDict, card_name):
+			back_card_element = ET.Element("card")
+			back_id_element = ET.Element("id")
+			back_slots_element = ET.Element("slots")
+			back_name_element = ET.Element("name")
+
+			back_id_element.text = MPC_FILL_PLACEHOLDER_ID
+			back_name_element.text = fixCardName(doubleFacedCardDict[card_name], formatName) + IMAGE_SUFFIX
+			back_slots_element.text = slots
+			
+			back_card_element.append(back_id_element)
+			back_card_element.append(slots_element)
+			back_card_element.append(back_name_element)
+			
+			backs.append(back_card_element)
+
+		# Add the <slots> and <name> elements to the <card> element
+		card_element.append(id_element)
+		card_element.append(slots_element)
+		card_element.append(name_element)
+
+		# Add the <card> element to the root element
+		fronts.append(card_element)
+
+	root.append(fronts)
+
+	if len(backs) > 0:
+		root.append(backs)
+
+	cardbacks = ET.Element("cardback")
+	cardbacks.text = MPC_FILL_CARDBACK
+
+	root.append(cardbacks)
+
+	# Create an ElementTree object
+	tree = ET.ElementTree(root)
+
+	# Write the XML to a file
+	tree.write("output.xml")
 
 def reprocessImageForMPCFill(oldImagePath, newImagePath):
 	# Thanks ChatGPT, I'm lazy!
@@ -123,7 +232,7 @@ def fixCardName(cardName, formatName):
 	cardName = cardName.replace("â€™", "")
 	cardName = cardName.replace("\t", " ")
 
-	return cardName
+	return cardName.strip()
 
 def getUrlSanitizedCardnameAndSet(cardName):
 	set_code = None
@@ -177,9 +286,9 @@ def populateDoubleFacedCardDict():
 		frontFaceName = None
 		for line in doubleFacedCardFileContents.split("\n"):
 			if not frontFaceName:
-				frontFaceName = line
+				frontFaceName = line.strip()
 			else:
-				doubleFacedCardDict[frontFaceName] = line
+				doubleFacedCardDict[frontFaceName] = line.strip()
 				frontFaceName = None
 
 	return doubleFacedCardDict
@@ -313,23 +422,18 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 		imgUrl = None
 		if matches:
 			shortSetCode = matches.group(1).upper()
-			cardTitle = matches.group(2)
+			cardTitle = matches.group(2).strip()
 			cardSet = matches.group(3)
 			isWeirdCardType = matches.group(4)
 			weirdCardType = matches.group(5)
 			imgUrl = matches.group(6)
 
-			imgUrlLastChar = imgUrl[-5]
-			backInImgUrl = "back" in imgUrl
-			isBackImage = imgUrlLastChar == 'b' or backInImgUrl # this feels fragile, but such is the fate of screen scraping
+			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nshortSetCode = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\n" % (cardName, cardTitle, cardSet, shortSetCode, isWeirdCardType, weirdCardType, line, imgUrl))
 
-			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nshortSetCode = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\nimgUrlLastChar = %s\nbackInImgUrl = %s\nisBackImage = %s\n" % (cardName, cardTitle, cardSet, shortSetCode, isWeirdCardType, weirdCardType, line, imgUrl, imgUrlLastChar, backInImgUrl, isBackImage))
-
-			incorrect_double_faced_side = (isDoubleFacedFrontFace(doubleFacedCardDict, cardName) and isBackImage) or (isDoubleFacedBackFace(doubleFacedCardDict, cardName) and not isBackImage)
 			incorrect_set_code = (set_code and shortSetCode != set_code)
 			ignore_this_set = shortSetCode in CARD_SETS_TO_IGNORE and not set_code
 			
-			skip_download = incorrect_double_faced_side or incorrect_set_code or ignore_this_set
+			skip_download = incorrect_set_code or ignore_this_set
 
 			if skip_download:
 				pass # if-statement was more readable this way
@@ -338,6 +442,10 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 				# PNG (high res) imgUrl:   https://cards.scryfall.io/png/front/b/0/b0faa7f2-b547-42c4-a810-839da50dadfe.png?1559591477
 				imgUrl = imgUrl.replace("https://cards.scryfall.io/normal", "https://cards.scryfall.io/png")
 				imgUrl = imgUrl.replace(".jpg", ".png")
+
+				if isDoubleFacedBackFace(doubleFacedCardDict, cardName):
+					imgUrl = imgUrl.replace("png/front/", "png/back/")
+
 				print("Downloading %s" % imgUrl)
 				imgRequest = urllib.request.Request(imgUrl, headers=headers)
 				imgData = urllib.request.urlopen(imgRequest).read()
@@ -363,7 +471,7 @@ def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
 
 			if backFaceName:
 				if(set_code):
-					backFaceName = backFaceName + "(" + set_code + ")"
+					backFaceName = backFaceName + " (" + set_code + ")"
 
 				with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'a+') as doubleFacedCardFile:
 					doubleFacedCardFile.write(cardName + "\n")
@@ -437,6 +545,7 @@ for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 
 			if DO_MPCFILL_POSTPROCESSING:
 				copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
+				createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
 			else:
 				copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, files, formatName)
 
