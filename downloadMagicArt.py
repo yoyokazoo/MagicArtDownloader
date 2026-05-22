@@ -346,6 +346,22 @@ def getFormatNameFromSubDir(subDir):
 	formatName = formatNameMatches.group(1) if formatNameMatches else ""
 	return formatName
 
+def safeFilename(cardName):
+	return cardName.replace(" // ", " -- ")
+
+def splitCombinedCardName(cardName):
+	if " // " not in cardName:
+		return None
+	set_code = None
+	set_code_match = re.search(SET_CODE_REGEX, cardName)
+	if set_code_match:
+		set_code = set_code_match.group(2)
+		cardName = cardName[:-len(set_code_match.group(1))].strip()
+	front, back = cardName.split(" // ", 1)
+	if set_code:
+		return "%s (%s)" % (front.strip(), set_code), "%s (%s)" % (back.strip(), set_code)
+	return front.strip(), back.strip()
+
 def canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 	if imageNameToCheck in files:
 		#print "%s found in directory, skipping" % cardName
@@ -362,20 +378,33 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 	# iterate through dictionary again, copying over as many copies as the decklist specifies
 	for initialCardName, cardCount in decklistDict.items():
 		cardName = fixCardName(initialCardName, formatName)
-		imageNameToCheck = cardName + IMAGE_SUFFIX
+		combined = splitCombinedCardName(cardName)
+		if combined:
+			frontName, backName = combined
+			for faceName in (frontName, backName):
+				if not unfoundCardDict.get(faceName + IMAGE_SUFFIX, False):
+					suffixNum = 1
+					while suffixNum <= cardCount:
+						oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, faceName + IMAGE_SUFFIX)
+						newImagePath = os.path.join(subDir, formatName + "_" + faceName + "_" + str(suffixNum) + IMAGE_SUFFIX)
+						shutil.copy(oldImagePath, newImagePath)
+						suffixNum += 1
+			continue
+
+		imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 
 		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 			pass # format-specific art exists
 		elif USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
 			print("Couldn't find '%s' in the magic images folder or existing images dict.  Using the default %s instead" % (cardName, initialCardName))
 			cardName = initialCardName
-			imageNameToCheck = cardName + IMAGE_SUFFIX
+			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 
 		if not unfoundCardDict.get(imageNameToCheck, False):
 			suffixNum = 1
 			while suffixNum <= cardCount:
-				oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX)
-				newImagePath = os.path.join(subDir, formatName + "_" + cardName + "_" + str(suffixNum) + IMAGE_SUFFIX)
+				oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, safeFilename(cardName) + IMAGE_SUFFIX)
+				newImagePath = os.path.join(subDir, formatName + "_" + safeFilename(cardName) + "_" + str(suffixNum) + IMAGE_SUFFIX)
 				shutil.copy(oldImagePath, newImagePath)
 				suffixNum += 1
 
@@ -383,23 +412,41 @@ def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, su
 	# iterate through dictionary again, copying over as many copies as the decklist specifies
 	for initialCardName, cardCount in decklistDict.items():
 		cardName = fixCardName(initialCardName, formatName)
-		imageNameToCheck = cardName + IMAGE_SUFFIX
+		combined = splitCombinedCardName(cardName)
+		if combined:
+			frontName, backName = combined
+			for faceName in (frontName, backName):
+				if not unfoundCardDict.get(faceName + IMAGE_SUFFIX, False):
+					oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, faceName + IMAGE_SUFFIX)
+					newImagePath = os.path.join(subDir, faceName + IMAGE_SUFFIX)
+					reprocessImageForMPCFill(oldImagePath, newImagePath)
+			continue
+
+		imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 
 		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 			pass # format-specific art exists
 		elif USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
 			print("Couldn't find '%s' in the magic images folder or existing images dict.  Using the default %s instead" % (cardName, initialCardName))
 			cardName = initialCardName
-			imageNameToCheck = cardName + IMAGE_SUFFIX
+			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 
 		if not unfoundCardDict.get(imageNameToCheck, False):
-			oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, cardName + IMAGE_SUFFIX)
-			newImagePath = os.path.join(subDir, cardName + IMAGE_SUFFIX)
+			oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, safeFilename(cardName) + IMAGE_SUFFIX)
+			newImagePath = os.path.join(subDir, safeFilename(cardName) + IMAGE_SUFFIX)
 			reprocessImageForMPCFill(oldImagePath, newImagePath)
 
 def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, existingImageDict):
 	downloadSuccess = False
 	needToRerunLoop = False
+
+	# If card name is "Front // Back (SET)", download each face as its own file
+	combined = splitCombinedCardName(fileCardName)
+	if combined:
+		frontName, backName = combined
+		frontSuccess, _ = downloadSingleCardImage(frontName, frontName, doubleFacedCardDict, existingImageDict)
+		backSuccess, _ = downloadSingleCardImage(backName, backName, doubleFacedCardDict, existingImageDict)
+		return frontSuccess and backSuccess, False
 
 	# Extract optional set code (e.g. "Savannah Lions (A25)" → set_code="A25")
 	set_code = None
@@ -470,7 +517,7 @@ def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, exi
 		imgRequest = urllib.request.Request(imgUrl, headers=headers)
 		imgData = urllib.request.urlopen(imgRequest).read()
 
-		newCardImageFileName = fileCardName + IMAGE_SUFFIX
+		newCardImageFileName = safeFilename(fileCardName) + IMAGE_SUFFIX
 		with open(os.path.join(IMAGE_DIRECTORY_ROOT, newCardImageFileName), 'ab') as f:
 			f.write(imgData)
 		existingImageDict[newCardImageFileName.lower()] = True
@@ -489,15 +536,25 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 		cardName = fixCardName(initialCardName, formatName)
 		#print("Fixed cardName %s" % cardName)
 
-		imageNameToCheck = cardName + IMAGE_SUFFIX
-		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
-			continue
+		combined = splitCombinedCardName(cardName)
+		if combined:
+			frontName, backName = combined
+			frontImageName = frontName + IMAGE_SUFFIX
+			backImageName = backName + IMAGE_SUFFIX
+			if canSkipCardImageDownload(frontImageName, files, existingImageDict) and \
+			   canSkipCardImageDownload(backImageName, files, existingImageDict):
+				continue
+			imageNameToCheck = frontImageName
+		else:
+			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
+			if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+				continue
 
 		if USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
 			print("Couldn't find '%s' in the magic images folder or existing images dict.  If you want a format-specific land, you'll have to create it manually.  Using the default %s instead" % (cardName, initialCardName))
 			cardName = initialCardName
 
-			imageNameToCheck = cardName + IMAGE_SUFFIX
+			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 			if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 				continue
 
