@@ -3,6 +3,9 @@ import re
 import shutil
 
 import urllib.request
+import urllib.parse
+import json
+import time
 import string
 
 # pip install pillow
@@ -11,11 +14,7 @@ from PIL import Image
 
 import xml.etree.ElementTree as ET
 
-# todo: Move all the scryfall-specific stuff to its own file to allow for scraping from other sites, keep this code relatively clean, etc.
-URL_PREFIX = "https://scryfall.com/search?as=grid&dir=asc&order=released&q=%21%22";
-URL_SUFFIX = "%22&unique=prints";
-
-IMAGE_IN_SOURCE_REGEX = "\s*<img class=\"card (.*?) border.*title=\"(.*?)\((.*?)\)\".*?(data-rotate=\"(.*?)\" )?src=\"(.*\.jpg).*"
+SCRYFALL_API_SEARCH = "https://api.scryfall.com/cards/search"
 
 CARD_SETS_TO_IGNORE = [
 	"PW12", "P09",
@@ -35,10 +34,10 @@ DOUBLE_FACED_CARD_DICTIONARY_PATH =  "./doubleFacedCardDict.txt"
 IMAGE_DIRECTORY_ROOT = "./magic_images"
 DECKLIST_DIRECTORY_ROOT = "./decklists"
 
-MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
-SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+MAINDECK_REGEX = r"\s*[mM]ain\s*[dD]eck:?\s*"
+SIDEBOARD_REGEX = r"\s*[sS]ide\s*[bB]oard:?\s*"
 
-SET_CODE_REGEX = "(\s*\((\w\w\w)\))$"
+SET_CODE_REGEX = r"(\s*\((\w\w\w)\))$"
 
 
 RECOPY_IMAGES = True
@@ -46,9 +45,7 @@ RECOPY_IMAGES = True
 USE_FORMAT_SPECIFIC_LANDS = True
 DO_MPCFILL_POSTPROCESSING = True
 
-# urllib2 junk
-user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
-headers = { 'User-Agent' : user_agent }
+headers = {'User-Agent': 'MagicArtDownloader/1.0', 'Accept': 'application/json'}
 
 BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
 
@@ -238,13 +235,13 @@ def isDoubleFacedBackFace(doubleFacedCardDict, cardName):
 
 def fixCardName(cardName, formatName):
 	# Convert Fire / Ice, Fire//Ice into Fire_Ice
-	splitCardName = re.search("^(\S*?)\s*\/\/?\s*(\S*)", cardName)
+	splitCardName = re.search(r"^(\S*?)\s*\/\/?\s*(\S*)", cardName)
 	if splitCardName:
 		newCardName = splitCardName.group(1).capitalize() + "_" + splitCardName.group(2).capitalize()
 		cardName = newCardName # should be cardName = newCardName so we can fix all screwups?
 
 	# Circle of Protection: Blue into Circle of Protection Blue
-	colonCardName = re.search("([^:]*):\s*([^:]*)", cardName)
+	colonCardName = re.search(r"([^:]*):\s*([^:]*)", cardName)
 	if colonCardName:
 		newCardName = colonCardName.group(1).capitalize() + "_" + colonCardName.group(2).capitalize()
 		cardName = newCardName # should be cardName = newCardName so we can fix all screwups?
@@ -260,24 +257,6 @@ def fixCardName(cardName, formatName):
 
 	return cardName.strip()
 
-def getUrlSanitizedCardnameAndSet(cardName):
-	set_code = None
-	set_code_match = re.search(SET_CODE_REGEX, cardName)
-	if set_code_match:
-		set_code_text = set_code_match.group(1)
-		set_code = set_code_match.group(2)
-		cardName = cardName[:-len(set_code_text)]
-
-	# https://www.degraeve.com/reference/specialcharacters.php
-	cardName = cardName.replace("'", "")
-	cardName = cardName.replace("(", "%28")
-	cardName = cardName.replace(")", "%29")
-	cardName = cardName.replace("!", "%33")
-	cardName = cardName.replace("\"", "%34")
-	cardName = cardName.replace(":", "%3A")
-	cardName = cardName.replace(" ", "+")
-	cardName = cardName.replace("_", "//") # change Fire_Ice to Fire//Ice
-	return cardName, set_code
 
 def addDoubleFacedCardsToDict(decklistDict):
 	cardsToAdd = {}
@@ -343,7 +322,7 @@ def populateInitialDecklistDict(subDir, fileName):
 		if sideboard_line:
 			continue
 
-		matches = re.search("(\d*)x?(\s*)(.*)", line)
+		matches = re.search(r"(\d*)x?(\s*)(.*)", line)
 		cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
 		cardName = matches.group(3).strip()
 
@@ -363,7 +342,7 @@ def deleteExistingDecklistImages(subDir, files):
 
 def getFormatNameFromSubDir(subDir):
 	subDir = subDir.replace('\\', '/')
-	formatNameMatches = re.search("\.\/decklists\/(.*?)(\/|$)", subDir)
+	formatNameMatches = re.search(r"\.\/decklists\/(.*?)(\/|$)", subDir)
 	formatName = formatNameMatches.group(1) if formatNameMatches else ""
 	return formatName
 
@@ -418,96 +397,86 @@ def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, su
 			newImagePath = os.path.join(subDir, cardName + IMAGE_SUFFIX)
 			reprocessImageForMPCFill(oldImagePath, newImagePath)
 
-def downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict):
-	#print("Download single card image -- cardName = %s" % (cardName))
+def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, existingImageDict):
 	downloadSuccess = False
 	needToRerunLoop = False
 
-	sanitized_cardname, set_code = getUrlSanitizedCardnameAndSet(cardName)
-	url = URL_PREFIX + sanitized_cardname + URL_SUFFIX
-	print("Checking URL %s" % url)
-	response = urllib.request.urlopen(url)
-	webContent = str(response.read())
-	#print("webContent = %s" % webContent)
-	lines = webContent.split("\\n")
-	#print("Split downloaded webcontent into %d lines" % len(lines))
-	for lineIndex in range(len(lines)):
+	# Extract optional set code (e.g. "Savannah Lions (A25)" → set_code="A25")
+	set_code = None
+	plain_name = scryfallName
+	set_code_match = re.search(SET_CODE_REGEX, scryfallName)
+	if set_code_match:
+		set_code = set_code_match.group(2)
+		plain_name = scryfallName[:-len(set_code_match.group(1))].strip()
+
+	# Normalize mojibake curly apostrophe to a straight apostrophe for Scryfall
+	plain_name = plain_name.replace("â€™", "'")
+
+	params = urllib.parse.urlencode({
+		'q': '!"%s"' % plain_name,
+		'order': 'released',
+		'dir': 'asc',
+		'unique': 'prints'
+	})
+	api_url = SCRYFALL_API_SEARCH + "?" + params
+	print("Checking URL %s" % api_url)
+
+	try:
+		request = urllib.request.Request(api_url, headers=headers)
+		response = urllib.request.urlopen(request)
+		data = json.loads(response.read())
+	except urllib.error.HTTPError as e:
+		print("HTTP error fetching '%s': %s" % (scryfallName, e))
+		return False, False
+
+	for card in data.get("data", []):
 		if downloadSuccess:
+			break
+
+		shortSetCode = card["set"].upper()
+		doubleFaced = card.get("layout") in ["transform", "modal_dfc"]
+
+		incorrect_set_code = set_code and shortSetCode != set_code
+		ignore_this_set = shortSetCode in CARD_SETS_TO_IGNORE and not set_code
+
+		if incorrect_set_code or ignore_this_set:
 			continue
 
-		line = lines[lineIndex]
-		# Example lines
-		#          <img class="card a25 border-black" alt="" title="Savannah Lions (A25)" src="https://img.scryfall.com/cards/large/en/a25/33.jpg?1521724798" />
-		#          <img class="card isd border-black" alt="" title="Delver of Secrets // Insectile Aberration (ISD)" data-rotate="flip-backside" src="https://img.scryfall.com/cards/large/front/1/1/11bf83bb-c95b-4b4f-9a56-ce7a1816307a.jpg?1545407245" />
-		#          <img class="card uma border-black" alt="" title="Fire // Ice (UMA)" data-rotate="rotate-90cw" src="https://img.scryfall.com/cards/large/front/3/f/3f822331-315e-4297-bb69-f1069032c6c5.jpg?1547518354" />
-		matches = re.search(IMAGE_IN_SOURCE_REGEX, line)
-
-		cardTitle = None
-		isWeirdCardType = None
-		weirdCardType = None
-		imgUrl = None
-		if matches:
-			shortSetCode = matches.group(1).upper()
-			cardTitle = matches.group(2).strip()
-			cardSet = matches.group(3)
-			isWeirdCardType = matches.group(4)
-			weirdCardType = matches.group(5)
-			imgUrl = matches.group(6)
-
-			print("\ncardName = %s\ncardTitle = %s\ncardSet = %s\nshortSetCode = %s\nisWeirdCardType = %s\nweirdCardType = %s\nline = %s\nimgUrl = %s\n" % (cardName, cardTitle, cardSet, shortSetCode, isWeirdCardType, weirdCardType, line, imgUrl))
-
-			incorrect_set_code = (set_code and shortSetCode != set_code)
-			ignore_this_set = shortSetCode in CARD_SETS_TO_IGNORE and not set_code
-			
-			skip_download = incorrect_set_code or ignore_this_set
-
-			if skip_download:
-				pass # if-statement was more readable this way
-			else:
-				# NORMAL (low res) imgUrl: https://cards.scryfall.io/normal/front/b/0/b0faa7f2-b547-42c4-a810-839da50dadfe.jpg?1559591477
-				# PNG (high res) imgUrl:   https://cards.scryfall.io/png/front/b/0/b0faa7f2-b547-42c4-a810-839da50dadfe.png?1559591477
-				imgUrl = imgUrl.replace("https://cards.scryfall.io/normal", "https://cards.scryfall.io/png")
-				imgUrl = imgUrl.replace(".jpg", ".png")
-
-				if isDoubleFacedBackFace(doubleFacedCardDict, cardName):
-					imgUrl = imgUrl.replace("png/front/", "png/back/")
-
-				print("Downloading %s" % imgUrl)
-				imgRequest = urllib.request.Request(imgUrl, headers=headers)
-				imgData = urllib.request.urlopen(imgRequest).read()
-
-				# save in main image directory, then copy over
-				newCardImageFileName = cardName + IMAGE_SUFFIX
-				outputImage = open(os.path.join(IMAGE_DIRECTORY_ROOT, newCardImageFileName), 'a+b')
-				outputImage.write(imgData)
-				outputImage.close()
-				existingImageDict[newCardImageFileName.lower()] = True
-				downloadSuccess = True
-				#print("Download success")
-
-		doubleFaced = weirdCardType == "flip-backside"
-
-		# If we find a double-faced card that we previously didn't know about, add it to the dictionary
-		if(doubleFaced and (not isPartOfDoubleFacedCardDict(doubleFacedCardDict, cardName))):
-			print("Found a double faced card '%s' that isn't part of the double faced card dictionary. Re-running download loop with updated decklist" % cardName)
-			# Delver of Secrets // Insectile Aberration (ISD)
-			cardTitleMatches = re.search(".*// (.*)", cardTitle)
-			backFaceName = cardTitleMatches.group(1)
-			#print("Back face name %s" % backFaceName)
-
-			if backFaceName:
-				if(set_code):
+		# If this is a newly-encountered double-faced card, record it and signal a re-run
+		if doubleFaced and not isPartOfDoubleFacedCardDict(doubleFacedCardDict, fileCardName):
+			card_faces = card.get("card_faces", [])
+			if len(card_faces) >= 2:
+				backFaceName = card_faces[1]["name"]
+				print("Found double-faced card '%s', adding to dictionary and re-running" % fileCardName)
+				if set_code:
 					backFaceName = backFaceName + " (" + set_code + ")"
-
-				with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'a+') as doubleFacedCardFile:
-					doubleFacedCardFile.write(cardName + "\n")
-					doubleFacedCardFile.write(backFaceName + "\n")
-				doubleFacedCardDict[cardName] = backFaceName
+				with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'a+') as f:
+					f.write(fileCardName + "\n")
+					f.write(backFaceName + "\n")
+				doubleFacedCardDict[fileCardName] = backFaceName
 				needToRerunLoop = True
-			else:
-				raise Exception("Unable to parse back face name from: '%s' " % cardTitle)
 
-	#print("At end of downloadSingleCardImage.  Download success? %s  Need to rerun loop (new double-faced cards found)? %s" % (downloadSuccess, needToRerunLoop))
+		isBackFace = isDoubleFacedBackFace(doubleFacedCardDict, fileCardName)
+		if "image_uris" in card:
+			imgUrl = card["image_uris"]["png"]
+		elif "card_faces" in card:
+			face_index = 1 if isBackFace else 0
+			imgUrl = card["card_faces"][face_index]["image_uris"]["png"]
+		else:
+			print("No image URL found for '%s'" % scryfallName)
+			continue
+
+		print("Downloading %s" % imgUrl)
+		imgRequest = urllib.request.Request(imgUrl, headers=headers)
+		imgData = urllib.request.urlopen(imgRequest).read()
+
+		newCardImageFileName = fileCardName + IMAGE_SUFFIX
+		with open(os.path.join(IMAGE_DIRECTORY_ROOT, newCardImageFileName), 'ab') as f:
+			f.write(imgData)
+		existingImageDict[newCardImageFileName.lower()] = True
+		downloadSuccess = True
+		time.sleep(0.1)
+
 	return downloadSuccess, needToRerunLoop
 
 def downloadMissingCardImages(decklistDict, unfoundCardDict):
@@ -535,7 +504,7 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 		# try to download from magiccards.info to image directory
 		print("%s not downloaded, trying to download from scryfall" % cardName)
 
-		downloadSuccess, needToRerunForThisCard = downloadSingleCardImage(cardName, doubleFacedCardDict, existingImageDict)
+		downloadSuccess, needToRerunForThisCard = downloadSingleCardImage(initialCardName, cardName, doubleFacedCardDict, existingImageDict)
 		if needToRerunForThisCard:
 			needToRerunLoop = True
 
