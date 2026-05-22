@@ -38,6 +38,12 @@ class Cards:
 		self.set_release_dates = {s['code']: s['releaseDate'] for s in set_list}
 		self.real_sets = {s['code'] for s in set_list if s['type'] in self.REAL_SET_TYPES}
 
+	def isCardInSet(self, cardname, setCode):
+		card_list = self.normal_cards.get(cardname)
+		if not card_list:
+			return True  # custom card, skip validation
+		return setCode in card_list[0].get('printings', [])
+
 	def getEarliestSet(self, cardname):
 		card_list = self.normal_cards.get(cardname)
 		if not card_list:

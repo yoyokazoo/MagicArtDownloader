@@ -224,9 +224,53 @@ def collapseDecklistFile(filePath):
 	with open(filePath, 'w') as f:
 		f.write("\n".join(out_lines))
 
+def verifyAndFixDecklistSetCodes(filePath):
+	with open(filePath, 'r') as f:
+		raw = f.read()
+
+	for line in raw.split("\n"):
+		if re.search(MAINDECK_REGEX, line) or re.search(SIDEBOARD_REGEX, line):
+			continue
+
+		matches = re.search(r"(\d*)x?(\s*)(.*)", line)
+		cardName = matches.group(3).strip() if matches else ''
+		if not cardName or not re.search(SET_CODE_REGEX, cardName):
+			continue
+
+		set_code = re.search(r'\(([A-Z0-9]{2,6})\)$', cardName).group(1)
+		base_name = re.sub(SET_CODE_REGEX, '', cardName).strip()
+
+		if not allCards.isCardInSet(base_name, set_code):
+			earliest = allCards.getEarliestSet(base_name)
+			print("WARNING: '%s' does not appear in set %s (%s). Earliest set: %s" % (base_name, set_code, filePath, earliest))
+
+def normalizeWhitespaceInDecklist(filePath):
+	with open(filePath, 'r') as f:
+		raw = f.read()
+
+	out_lines = []
+	modified = False
+	for line in raw.split("\n"):
+		if re.search(MAINDECK_REGEX, line) or re.search(SIDEBOARD_REGEX, line):
+			out_lines.append(line)
+			continue
+
+		normalized = line.strip()
+		normalized = re.sub(r'\s+(\([A-Z0-9]{2,6}\))$', r' \1', normalized)
+
+		if normalized != line:
+			modified = True
+		out_lines.append(normalized)
+
+	if modified:
+		with open(filePath, 'w') as f:
+			f.write("\n".join(out_lines))
+
 def verifySingleDecklistForCardnames(filePath, collapse=False):
+	normalizeWhitespaceInDecklist(filePath)
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
 	verifyAndFixDecklistCardnames(combinedDict, filePath)
+	verifyAndFixDecklistSetCodes(filePath)
 	appendEarliestSetsToDecklist(filePath)
 	if collapse:
 		collapseDecklistFile(filePath)
