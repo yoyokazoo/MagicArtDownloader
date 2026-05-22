@@ -23,6 +23,7 @@ def getCardJsonDirectory(args):
 
 MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+SET_CODE_REGEX = r"\s*\([A-Z0-9]{2,6}\)$"
 REGEX_PATH_SEP = "\\\\" if os.path.sep == "\\" else os.path.sep
 FORMAT_NAME_REGEX = "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + DECKLIST_SUFFIX + "$"
 
@@ -119,7 +120,7 @@ def replaceCardNameInDecklist(oldCardName, newCardName, filePath):
 
 def verifyAndFixDecklistCardnames(combinedDict, filePath):
 	for card in combinedDict.keys():
-		#print("Checking card %s" % card)
+		card = re.sub(SET_CODE_REGEX, '', card).strip()
 		if not card in allCards.getAllCardnames():
 			if card.lower() in allCards.getAllLowercaseCardnames():
 				print("Fixing capitalization on %s to %s" % (card, allCards.getAllLowercaseCardnamesDict()[card.lower()]))
@@ -164,9 +165,38 @@ def verifyAndFixDecklistCardnames(combinedDict, filePath):
 			else:
 				raise Exception("Invalid choice!")
 
+def appendEarliestSetsToDecklist(filePath):
+	with open(filePath, 'r') as f:
+		raw = f.read()
+
+	modified = False
+	out_lines = []
+	for line in raw.split("\n"):
+		if re.search(MAINDECK_REGEX, line) or re.search(SIDEBOARD_REGEX, line):
+			out_lines.append(line)
+			continue
+
+		matches = re.search(r"(\d*)x?(\s*)(.*)", line)
+		cardName = matches.group(3).strip() if matches else ''
+		if not cardName or re.search(SET_CODE_REGEX, cardName):
+			out_lines.append(line)
+			continue
+
+		earliest = allCards.getEarliestSet(cardName)
+		if earliest:
+			out_lines.append(line.rstrip() + ' (%s)' % earliest)
+			modified = True
+		else:
+			out_lines.append(line)
+
+	if modified:
+		with open(filePath, 'w') as f:
+			f.write("\n".join(out_lines))
+
 def verifySingleDecklistForCardnames(filePath):
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
-	verified = verifyAndFixDecklistCardnames(combinedDict, filePath)
+	verifyAndFixDecklistCardnames(combinedDict, filePath)
+	appendEarliestSetsToDecklist(filePath)
 
 def verifyAllDecklistCardnames(args):
 	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
