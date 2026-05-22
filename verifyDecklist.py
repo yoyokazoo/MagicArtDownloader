@@ -193,10 +193,43 @@ def appendEarliestSetsToDecklist(filePath):
 		with open(filePath, 'w') as f:
 			f.write("\n".join(out_lines))
 
-def verifySingleDecklistForCardnames(filePath):
+def collapseDecklistFile(filePath):
+	with open(filePath, 'r') as f:
+		lines = f.read().split("\n")
+
+	out_lines = []
+	pending = {}
+
+	def flush_pending():
+		for cardname, count in pending.items():
+			out_lines.append('%d %s' % (count, cardname))
+		pending.clear()
+
+	for line in lines:
+		if re.search(MAINDECK_REGEX, line) or re.search(SIDEBOARD_REGEX, line):
+			flush_pending()
+			out_lines.append(line)
+			continue
+
+		matches = re.search(r"(\d*)x?(\s*)(.*)", line)
+		cardName = matches.group(3).strip() if matches else ''
+		if not cardName:
+			continue
+
+		count = int(matches.group(1)) if matches.group(1) else 1
+		pending[cardName] = pending.get(cardName, 0) + count
+
+	flush_pending()
+
+	with open(filePath, 'w') as f:
+		f.write("\n".join(out_lines))
+
+def verifySingleDecklistForCardnames(filePath, collapse=False):
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
 	verifyAndFixDecklistCardnames(combinedDict, filePath)
 	appendEarliestSetsToDecklist(filePath)
+	if collapse:
+		collapseDecklistFile(filePath)
 
 def verifyAllDecklistCardnames(args):
 	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
@@ -205,115 +238,23 @@ def verifyAllDecklistCardnames(args):
 				continue
 			if fileName.endswith(DECKLIST_SUFFIX):
 				filePath = os.path.join(subDir, fileName)
-				verifySingleDecklistForCardnames(filePath)
+				verifySingleDecklistForCardnames(filePath, collapse=args.collapse)
 
 	print("Done verifying decklists")
-
-def findAllFilePathsWithSoupPlayerName(args):
-	path_to_exclude = "asfdasdfasdf"
-
-	file_paths = []
-	for subDir, dirs, files in os.walk(getDecklistDirectory(args)):
-		for fileName in files:
-			filePath = os.path.join(subDir, fileName)
-			if path_to_exclude in filePath:
-				continue
-			if fileName.endswith(DECKLIST_SUFFIX) and args.soup_player in filePath:
-				file_paths.append(filePath)
-	return file_paths
 
 def getFormatNameFromFilePath(filePath):
 	formatNameMatches = re.search(FORMAT_NAME_REGEX, filePath)
 	formatName = formatNameMatches.group(1) if formatNameMatches else ""
 	return formatName
 
-def automaticallyAssignSetToCardIfPossible(soup_card, soup_decklist_dict, soup_options_dict, final_decklist):
-	differentSetsAvailable = len(set(soup_options_dict[soup_card]))
-	#print("%s has %d options available" % (soup_card, differentSetsAvailable))
-	if differentSetsAvailable == 1:
-		soup_decklist_dict[soup_card] -= 1
-		inner_options_array = final_decklist.get(soup_card, [])
-		inner_options_array.append(soup_options_dict[soup_card].pop())
-		final_decklist[soup_card] = inner_options_array
-
-
-def verifySoupDecklist(args):
-	verifyAllDecklistCardnames(args)
-	verifySingleDecklistForCardnames(args.filename)
-	soupCombinedDict, soupMaindeckDict, soupSideboardDict = populateDecklistDicts(args.filename)
-
-	print(args.soup_player)
-	print(args.filename)
-	pantry_filepaths = findAllFilePathsWithSoupPlayerName(args)
-	print(len(pantry_filepaths))
-	maindeck_decklists = {}
-	sideboard_decklists = {}
-	for filePath in pantry_filepaths:
-		_, maindeck, sideboard = populateDecklistDicts(filePath)
-		maindeck_decklists[filePath] = maindeck
-		sideboard_decklists[filePath] = sideboard
-
-		print("\n-----------------------------------%s-----------------------------------\n" % filePath)
-		print("Maindeck (%d cards): \n%s" % (sum(maindeck.values()), maindeck))
-		print()
-		print("Sideboard (%d cards): \n%s" % (sum(sideboard.values()), sideboard))
-
-
-	print("\n\n%s\n%s\n" % (soupMaindeckDict, soupSideboardDict))
-
-	soup_options_dict = {}
-	for soup_card, soup_card_count in soupMaindeckDict.items():
-		if soup_card in cards.BASIC_LAND_NAMES:
-			continue
-		#print("%s%s" % (soup_card, soup_card_count))
-		for maindeck_decklist_filepath, maindeck_decklist in maindeck_decklists.items():
-			if soup_card in maindeck_decklist:
-				# dict method
-				# inner_options_dict = soup_options_dict.get(soup_card, {})
-				# inner_options_dict[getFormatNameFromFilePath(maindeck_decklist_filepath)] = maindeck_decklist[soup_card]
-				# soup_options_dict[soup_card] = inner_options_dict
-				# array method
-				inner_options_array = soup_options_dict.get(soup_card, [])
-				for count in range(maindeck_decklist[soup_card]):
-					inner_options_array.append(getFormatNameFromFilePath(maindeck_decklist_filepath))
-				soup_options_dict[soup_card] = inner_options_array
-
-	#print(soup_options_dict)
-
-	final_decklist = {}
-	for soup_card, soup_card_options in soup_options_dict.items():
-		print(soup_card, soup_card_options)
-
-	for soup_card, soup_card_count in soupMaindeckDict.items():
-		if soup_card in cards.BASIC_LAND_NAMES:
-			continue
-
-		for inner_card_count in range(soup_card_count):
-			automaticallyAssignSetToCardIfPossible(soup_card, soupMaindeckDict, soup_options_dict, final_decklist)
-
-	print("\n\n%s\n\n%s\n\n%s\n\n" % (final_decklist, soup_options_dict, soupMaindeckDict))
-
-	#print(maindeck_decklists)
-	#print(sideboard_decklists)
-
-
-# Go through all the "well this card HAS to come from this set" options out of the way
-# If any options are now illegal -- AKA already used in 5 places in the final decklist, remove them from the remaining options
-# Keep repeating the above 2 steps until nothing changes
-# Pick a card, and assign a set to it
-# Repeat until no more cards to assign
-
 parser = argparse.ArgumentParser()
-parser.add_argument('-s', '--soup_player', help="Name of the player's pantry you're raiding")
 parser.add_argument('-f', '--filename', help="Filename of the decklist to check")
 parser.add_argument('-d', '--decklistDirectory', help="Directory of the source decklists to check")
 parser.add_argument('-j', '--jsonDirectory', help="Directory of the source json to check")
+parser.add_argument('-c', '--collapse', action='store_true', help="Collapse repeated card lines into a single line with a count prefix")
 args = parser.parse_args()
 print(args)
 
 allCards = cards.Cards(getCardJsonDirectory(args))
 
-if args.soup_player and args.filename:
-	verifySoupDecklist(args)
-else:
-	verifyAllDecklistCardnames(args)
+verifyAllDecklistCardnames(args)
