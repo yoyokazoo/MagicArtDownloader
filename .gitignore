@@ -1,5 +1,10 @@
 AllCards.json
+AllPrintings.json
+AtomicCards.json
+SetList.json
 CustomCards.json
+output.xml
+.claude/
 DecklistImages.zip
 CombinedDecklistImages.zip
 CombinedDecklists.zip

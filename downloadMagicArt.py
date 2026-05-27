@@ -37,7 +37,7 @@ DECKLIST_DIRECTORY_ROOT = "./decklists"
 MAINDECK_REGEX = r"\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = r"\s*[sS]ide\s*[bB]oard:?\s*"
 
-SET_CODE_REGEX = r"(\s*\((\w\w\w)\))$"
+SET_CODE_REGEX = r"(\s*\(([A-Z0-9]{2,6})\))$"
 
 
 RECOPY_IMAGES = True
