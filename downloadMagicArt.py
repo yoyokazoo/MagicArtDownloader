@@ -522,7 +522,7 @@ def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, exi
 			f.write(imgData)
 		existingImageDict[newCardImageFileName.lower()] = True
 		downloadSuccess = True
-		time.sleep(0.1)
+		time.sleep(0.3)
 
 	return downloadSuccess, needToRerunLoop
 

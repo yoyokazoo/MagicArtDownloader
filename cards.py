@@ -48,7 +48,8 @@ class Cards:
 		card_list = self.normal_cards.get(cardname)
 		if not card_list:
 			return None
-		printings = [p for p in card_list[0].get('printings', []) if p in self.real_sets]
+		all_printings = card_list[0].get('printings', [])
+		printings = [p for p in all_printings if p in self.real_sets] or all_printings
 		if not printings:
 			return None
 		return min(printings, key=lambda code: self.set_release_dates.get(code, '9999-99-99'))

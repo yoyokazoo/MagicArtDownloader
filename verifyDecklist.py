@@ -21,11 +21,11 @@ def getCardJsonDirectory(args):
 	else:
 		return DEFAULT_JSON_DIRECTORY_ROOT
 
-MAINDECK_REGEX = "\s*[mM]ain\s*[dD]eck:?\s*"
-SIDEBOARD_REGEX = "\s*[sS]ide\s*[bB]oard:?\s*"
+MAINDECK_REGEX = r"\s*[mM]ain\s*[dD]eck:?\s*"
+SIDEBOARD_REGEX = r"\s*[sS]ide\s*[bB]oard:?\s*"
 SET_CODE_REGEX = r"\s*\([A-Z0-9]{2,6}\)$"
 REGEX_PATH_SEP = "\\\\" if os.path.sep == "\\" else os.path.sep
-FORMAT_NAME_REGEX = "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + REGEX_PATH_SEP + "([\w\s\'']*)" + DECKLIST_SUFFIX + "$"
+FORMAT_NAME_REGEX = r"([\w\s'']*)" + REGEX_PATH_SEP + r"([\w\s'']*)" + REGEX_PATH_SEP + r"([\w\s'']*)" + DECKLIST_SUFFIX + "$"
 
 AUTO_REPLACE_THRESHOLD = 0.925
 
@@ -95,7 +95,7 @@ def populateDecklistDicts(filePath):
 			currentDict = sideboardDict
 			continue
 
-		matches = re.search("(\d*)x?(\s*)(.*)", line)
+		matches = re.search(r"(\d*)x?(\s*)(.*)", line)
 		cardCount = 1 if matches.group(1) == '' else int(matches.group(1))
 		cardName = matches.group(3)
 
@@ -297,7 +297,6 @@ parser.add_argument('-d', '--decklistDirectory', help="Directory of the source d
 parser.add_argument('-j', '--jsonDirectory', help="Directory of the source json to check")
 parser.add_argument('-c', '--collapse', action='store_true', help="Collapse repeated card lines into a single line with a count prefix")
 args = parser.parse_args()
-print(args)
 
 allCards = cards.Cards(getCardJsonDirectory(args))
 
