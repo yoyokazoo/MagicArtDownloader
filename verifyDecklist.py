@@ -30,6 +30,16 @@ FORMAT_NAME_REGEX = r"([\w\s'']*)" + REGEX_PATH_SEP + r"([\w\s'']*)" + REGEX_PAT
 AUTO_REPLACE_THRESHOLD = 0.925
 
 allCards = None
+dfcFaceToCombo = {}
+
+def buildDfcFaceToComboMap(allCardnames):
+	result = {}
+	for name in allCardnames:
+		if ' // ' in name:
+			front, back = name.split(' // ', 1)
+			result[front] = name
+			result[back] = name
+	return result
 
 # taken directly from https://www.datacamp.com/community/tutorials/fuzzy-string-python
 import numpy as np
@@ -128,11 +138,15 @@ def verifyAndFixDecklistCardnames(combinedDict, filePath):
 				continue
 
 			print("No matching card could be found for %s (%s), checking similar names..." % (card, filePath))
+			# Build a search-to-replacement map: DFC face names resolve to their combined name
+			search_to_replacement = {name: name for name in allCards.getAllCardnames()}
+			for face_name, combined_name in dfcFaceToCombo.items():
+				search_to_replacement[face_name] = combined_name
 			distances = {}
-			for leveshtein_card in allCards.getAllCardnames():
-				leveshtein_distance = levenshtein_ratio_and_distance(card,leveshtein_card,ratio_calc = True)
-				distances[leveshtein_card] = leveshtein_distance
-				#print("leveshtein_distance between %s and %s is %s" % (leveshtein_distance, card, leveshtein_card))
+			for search_name, replacement_name in search_to_replacement.items():
+				ratio = levenshtein_ratio_and_distance(card, search_name, ratio_calc=True)
+				if ratio > distances.get(replacement_name, 0):
+					distances[replacement_name] = ratio
 			count = 0
 			replacement_choices = []
 			sorted_distances = sorted(distances, key=distances.get, reverse=True)
@@ -266,7 +280,27 @@ def normalizeWhitespaceInDecklist(filePath):
 		with open(filePath, 'w') as f:
 			f.write("\n".join(out_lines))
 
+def preprocessDecklist(filePath):
+	with open(filePath, 'r') as f:
+		lines = f.read().split("\n")
+
+	out_lines = []
+	modified = False
+	for line in lines:
+		if line.startswith('//'):
+			modified = True
+			continue
+		if line.startswith('SB: '):
+			line = line[4:]
+			modified = True
+		out_lines.append(line)
+
+	if modified:
+		with open(filePath, 'w') as f:
+			f.write("\n".join(out_lines))
+
 def verifySingleDecklistForCardnames(filePath, collapse=False):
+	preprocessDecklist(filePath)
 	normalizeWhitespaceInDecklist(filePath)
 	combinedDict, maindeckDict, sideboardDict = populateDecklistDicts(filePath)
 	verifyAndFixDecklistCardnames(combinedDict, filePath)
@@ -299,5 +333,6 @@ parser.add_argument('-c', '--collapse', action='store_true', help="Collapse repe
 args = parser.parse_args()
 
 allCards = cards.Cards(getCardJsonDirectory(args))
+dfcFaceToCombo = buildDfcFaceToComboMap(allCards.getAllCardnames())
 
 verifyAllDecklistCardnames(args)
