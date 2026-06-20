@@ -31,12 +31,14 @@ class Cards:
 			self.populateCardData()
 
 	REAL_SET_TYPES = {'core', 'expansion', 'masters', 'draft_innovation', 'starter'}
+	COMMANDER_SET_TYPES = {'commander'}
 
 	def loadSetList(self):
 		with open(self.setListFilePath, 'r', encoding="utf-8") as set_list_file:
 			set_list = json.load(set_list_file)['data']
 		self.set_release_dates = {s['code']: s['releaseDate'] for s in set_list}
 		self.real_sets = {s['code'] for s in set_list if s['type'] in self.REAL_SET_TYPES}
+		self.commander_sets = {s['code'] for s in set_list if s['type'] in self.COMMANDER_SET_TYPES}
 
 	def isCardInSet(self, cardname, setCode):
 		card_list = self.normal_cards.get(cardname)
@@ -49,7 +51,9 @@ class Cards:
 		if not card_list:
 			return None
 		all_printings = card_list[0].get('printings', [])
-		printings = [p for p in all_printings if p in self.real_sets] or all_printings
+		printings = ([p for p in all_printings if p in self.real_sets]
+			or [p for p in all_printings if p in self.commander_sets]
+			or all_printings)
 		if not printings:
 			return None
 		return min(printings, key=lambda code: self.set_release_dates.get(code, '9999-99-99'))

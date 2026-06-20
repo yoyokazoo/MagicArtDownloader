@@ -33,6 +33,7 @@ DECKLIST_SUFFIX = ".txt"
 DOUBLE_FACED_CARD_DICTIONARY_PATH =  "./doubleFacedCardDict.txt"
 IMAGE_DIRECTORY_ROOT = "./magic_images"
 DECKLIST_DIRECTORY_ROOT = "./decklists"
+MPC_FILL_XML_DIRECTORY = "./mpc_fill_xml"
 
 MAINDECK_REGEX = r"\s*[mM]ain\s*[dD]eck:?\s*"
 SIDEBOARD_REGEX = r"\s*[sS]ide\s*[bB]oard:?\s*"
@@ -52,6 +53,30 @@ BASIC_LAND_NAMES = ["Forest", "Island", "Mountain", "Plains", "Swamp"]
 MPC_FILL_BRACKETS = [18, 36, 55, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 396, 504, 612]
 MPC_FILL_CARDBACK = "1lZX4vyveCm_h-bAzvvgK1d-T60dG-OtJ"
 MPC_FILL_PLACEHOLDER_ID = "1Cw1NnGISzJPWL-PrhgpexiuIdPhHiasc"
+
+MPC_FILL_PLAYER_NAMES_TO_CARDBACKS = {
+	"Brian":  "18UiOupqMQ39pOIMWtntiOJINBC5c7dgV",
+	"David":  "13kzMz2QQ4OelEaur5ZMfxpoRcIQ9bWOB",
+	"Jesse":  "1PxAMVAaNkKNHzF0brU1NxVWvC1hcy1N7",
+	"Kyle":   "1ygf4SSMHAKSi6u8D-8_r6K13Cw8L3IYa",
+	"Max":    "1C9pZkkH9VzibEwztx-hrVgbXu3VU10Es",
+	"Peter":  "18lSQAAhb4lMmM8ate8Sv-gbb4EvCNUL3",
+	"Stevie": "1svTDkXldZ5YtCZO3D4w7eDz1VKnnl1bs",
+	"Zac":    "1u-NjV3pOYYjf2iBU3zHVjCWf16F1srpU",
+	"Zaiem":  "1Jx2YaOHkzJo1Y47YfJdlP_1BpcTpalMZ",
+}
+
+# Brian https://drive.google.com/file/d/18UiOupqMQ39pOIMWtntiOJINBC5c7dgV/view?usp=sharing
+# David https://drive.google.com/file/d/13kzMz2QQ4OelEaur5ZMfxpoRcIQ9bWOB/view?usp=sharing
+# Jesse https://drive.google.com/file/d/1PxAMVAaNkKNHzF0brU1NxVWvC1hcy1N7/view?usp=sharing
+# Kyle https://drive.google.com/file/d/1ygf4SSMHAKSi6u8D-8_r6K13Cw8L3IYa/view?usp=sharing
+# Max https://drive.google.com/file/d/1C9pZkkH9VzibEwztx-hrVgbXu3VU10Es/view?usp=sharing
+# Peter https://drive.google.com/file/d/18lSQAAhb4lMmM8ate8Sv-gbb4EvCNUL3/view?usp=sharing
+# Stevie https://drive.google.com/file/d/1svTDkXldZ5YtCZO3D4w7eDz1VKnnl1bs/view?usp=sharing
+# Zac https://drive.google.com/file/d/1u-NjV3pOYYjf2iBU3zHVjCWf16F1srpU/view?usp=sharing
+# Zaiem https://drive.google.com/file/d/1Jx2YaOHkzJo1Y47YfJdlP_1BpcTpalMZ/view?usp=sharing
+# Electric Storm Back https://drive.google.com/file/d/1fcIxO_hmbzQpiSKSspGSimYJDSJfa_Pr/view?usp=sharing
+# Black Lotus https://drive.google.com/file/d/1Cw1NnGISzJPWL-PrhgpexiuIdPhHiasc/view
 
 def getMPCFillBracket(quantity):
 	for bracket in MPC_FILL_BRACKETS:
@@ -151,11 +176,12 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 
 	root.append(cardbacks)
 
-	# Create an ElementTree object
-	tree = ET.ElementTree(root)
+	rel = os.path.relpath(subDir, DECKLIST_DIRECTORY_ROOT)
+	parts = [p.replace(' ', '_') for p in rel.split(os.sep) if p and p != '.']
+	xml_filename = '_'.join(parts) + '_output.xml'
 
-	# Write the XML to a file
-	tree.write("output.xml")
+	tree = ET.ElementTree(root)
+	tree.write(os.path.join(MPC_FILL_XML_DIRECTORY, xml_filename))
 
 def sample_border_colors(image):
 	# Thanks ChatGPT, I'm lazy!
@@ -196,9 +222,9 @@ def reprocessImageForMPCFill(oldImagePath, newImagePath):
 	# Crop the image
 	cropped_image = original_image.crop((left, top, right, bottom))
 
-	# Create a new black image
 	average_border_color = sample_border_colors(original_image)
-	new_image = Image.new('RGB', (816, 1110), average_border_color)
+	border_color = average_border_color if min(average_border_color) >= 200 else (0, 0, 0)
+	new_image = Image.new('RGB', (816, 1110), border_color)
 
 	# Calculate the coordinates for pasting
 	paste_left = (new_image.width - cropped_image.width) // 2
@@ -278,6 +304,10 @@ def prepareDecklistsDirectory():
 	if not os.path.isdir(DECKLIST_DIRECTORY_ROOT):
 		os.mkdir(DECKLIST_DIRECTORY_ROOT);
 		raise Exception("Decklist directory doesn't exist! Creating it.  Fill with %s decklists to start downloading images." % DECKLIST_SUFFIX)
+
+def prepareMPCFillXMLDirectory():
+	if not os.path.isdir(MPC_FILL_XML_DIRECTORY):
+		os.mkdir(MPC_FILL_XML_DIRECTORY)
 
 def prepareDoubleFacedCardFile():
 	# go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
@@ -577,6 +607,7 @@ def downloadMissingCardImages(decklistDict, unfoundCardDict):
 prepareMagicImagesDirectory()
 prepareDecklistsDirectory()
 prepareDoubleFacedCardFile()
+prepareMPCFillXMLDirectory()
 
 doubleFacedCardDict = populateDoubleFacedCardDict()
 existingImageDict = populateExistingImageDict()
