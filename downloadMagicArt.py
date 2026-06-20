@@ -80,7 +80,7 @@ def getMPCFillBracket(quantity):
 
 	return bracket[-1]
 
-def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, formatName):
+def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, formatName, cardback_id=None, xml_filename=None):
 
 	frontDecklistDict = {}
 	for card_name, card_count in decklistDict.items():
@@ -120,7 +120,7 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 
 		# Just give it a nonsense id so I don't have to make changes to the uploader
 		id_element = ET.Element("id")
-		id_element.text = MPC_FILL_PLACEHOLDER_ID
+		id_element.text = fixCardName(card_name, formatName)
 
 		# Create the <slots> element and set its text
 		slots_element = ET.Element("slots")
@@ -139,11 +139,11 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 			back_slots_element = ET.Element("slots")
 			back_name_element = ET.Element("name")
 
-			back_id_element.text = MPC_FILL_PLACEHOLDER_ID
+			back_id_element.text = fixCardName(doubleFacedCardDict[card_name], formatName)
 			back_name_element.text = fixCardName(doubleFacedCardDict[card_name], formatName) + IMAGE_SUFFIX
 			back_slots_element.text = slots
 			
-			back_card_element.append(back_id_element)
+			#back_card_element.append(back_id_element)
 			back_card_element.append(slots_element)
 			back_card_element.append(back_name_element)
 			
@@ -163,13 +163,14 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 		root.append(backs)
 
 	cardbacks = ET.Element("cardback")
-	cardbacks.text = MPC_FILL_CARDBACK
+	cardbacks.text = cardback_id or MPC_FILL_CARDBACK
 
 	root.append(cardbacks)
 
-	rel = os.path.relpath(subDir, DECKLIST_DIRECTORY_ROOT)
-	parts = [p.replace(' ', '_') for p in rel.split(os.sep) if p and p != '.']
-	xml_filename = '_'.join(parts) + '_output.xml'
+	if xml_filename is None:
+		rel = os.path.relpath(subDir, DECKLIST_DIRECTORY_ROOT)
+		parts = [p.replace(' ', '_') for p in rel.split(os.sep) if p and p != '.']
+		xml_filename = '_'.join(parts) + '_output.xml'
 
 	tree = ET.ElementTree(root)
 	tree.write(os.path.join(MPC_FILL_XML_DIRECTORY, xml_filename))
@@ -361,6 +362,13 @@ def deleteExistingDecklistImages(subDir, files):
 	for fileName in files:
 		if fileName.endswith(IMAGE_SUFFIX):
 			os.remove(os.path.join(subDir, fileName))
+
+def getPlayerNameFromSubDir(subDir):
+	parts = subDir.replace('\\', '/').split('/')
+	for part in parts:
+		if part in MPC_FILL_PLAYER_NAMES_TO_CARDBACKS:
+			return part
+	return None
 
 def getFormatNameFromSubDir(subDir):
 	subDir = subDir.replace('\\', '/')
@@ -605,10 +613,13 @@ doubleFacedCardDict = populateDoubleFacedCardDict()
 existingImageDict = populateExistingImageDict()
 unfoundCardDict = {}
 
+combinedPlayerDecklistDicts = {}
+
 # recursively go through decklists directory, looking for txt files
 for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 	deleteExistingDecklistImages(subDir, files)
 	formatName = getFormatNameFromSubDir(subDir)
+	currentDirPlayer = getPlayerNameFromSubDir(subDir)
 
 	for fileName in files:
 		#if a txt file is found
@@ -618,11 +629,27 @@ for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 				decklistDict = populateInitialDecklistDict(subDir, fileName)
 				runLoop = downloadMissingCardImages(decklistDict, unfoundCardDict)
 
-			if DO_MPCFILL_POSTPROCESSING:
+			if currentDirPlayer and DO_MPCFILL_POSTPROCESSING:
+				copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
+				playerDict = combinedPlayerDecklistDicts.setdefault(currentDirPlayer, {})
+				for card, count in decklistDict.items():
+					playerDict[card] = playerDict.get(card, 0) + count
+			elif DO_MPCFILL_POSTPROCESSING:
 				copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
 				createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
 			else:
 				copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, files, formatName)
+
+for player, playerDecklistDict in combinedPlayerDecklistDicts.items():
+	tempDir = os.path.join(MPC_FILL_XML_DIRECTORY, 'tmp_' + player)
+	os.makedirs(tempDir, exist_ok=True)
+	tempFiles = os.listdir(tempDir)
+	copyCardImagesToDecklistDirectoryMPCFill(playerDecklistDict, existingImageDict, tempDir, tempFiles, '')
+	createXMLFileForMPCFill(
+		playerDecklistDict, existingImageDict, None, [], '',
+		cardback_id=MPC_FILL_PLAYER_NAMES_TO_CARDBACKS[player],
+		xml_filename=player + '_output.xml'
+	)
 
 # print out unfound cards
 if len(unfoundCardDict) == 0:
