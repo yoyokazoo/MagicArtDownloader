@@ -118,9 +118,12 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 		# Create the <card> element
 		card_element = ET.Element("card")
 
+		combined = splitCombinedCardName(card_name)
+		fixed_name = combined[0] if combined else fixCardName(card_name, formatName)
+
 		# Just give it a nonsense id so I don't have to make changes to the uploader
 		id_element = ET.Element("id")
-		id_element.text = fixCardName(card_name, formatName)
+		id_element.text = fixed_name
 
 		# Create the <slots> element and set its text
 		slots_element = ET.Element("slots")
@@ -129,18 +132,18 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 
 		# Create the <name> element and set its text
 		name_element = ET.Element("name")
-		name_element.text = fixCardName(card_name, formatName) + IMAGE_SUFFIX
+		name_element.text = fixed_name + IMAGE_SUFFIX
 
 		runningOffset += card_count
 
-		if isDoubleFacedFrontFace(doubleFacedCardDict, card_name):
+		if combined:
 			back_card_element = ET.Element("card")
 			back_id_element = ET.Element("id")
 			back_slots_element = ET.Element("slots")
 			back_name_element = ET.Element("name")
 
-			back_id_element.text = fixCardName(doubleFacedCardDict[card_name], formatName)
-			back_name_element.text = fixCardName(doubleFacedCardDict[card_name], formatName) + IMAGE_SUFFIX
+			back_id_element.text = combined[1]
+			back_name_element.text = combined[1] + IMAGE_SUFFIX
 			back_slots_element.text = slots
 			
 			#back_card_element.append(back_id_element)
