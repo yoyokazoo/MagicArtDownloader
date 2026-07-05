@@ -30,7 +30,6 @@ CARD_SETS_TO_IGNORE = [
 IMAGE_SUFFIX = ".png"
 DECKLIST_SUFFIX = ".txt"
 
-DOUBLE_FACED_CARD_DICTIONARY_PATH =  "./doubleFacedCardDict.txt"
 IMAGE_DIRECTORY_ROOT = "./magic_images"
 DECKLIST_DIRECTORY_ROOT = "./decklists"
 MPC_FILL_XML_DIRECTORY = "./mpc_fill_xml"
@@ -84,7 +83,7 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 
 	frontDecklistDict = {}
 	for card_name, card_count in decklistDict.items():
-		if not isDoubleFacedBackFace(doubleFacedCardDict, card_name):
+		if not isDFCBackFace(card_name):
 			frontDecklistDict[card_name] = card_count
 
 	# Create the root element
@@ -119,7 +118,13 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 		card_element = ET.Element("card")
 
 		combined = splitCombinedCardName(card_name)
-		fixed_name = combined[0] if combined else fixCardName(card_name, formatName)
+		is_dfc = combined and isDFCFrontFace(combined[0])
+		if is_dfc:
+			fixed_name = combined[0]
+		elif combined:
+			fixed_name = safeFilename(card_name)
+		else:
+			fixed_name = fixCardName(card_name, formatName)
 
 		# Just give it a nonsense id so I don't have to make changes to the uploader
 		id_element = ET.Element("id")
@@ -136,7 +141,7 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 
 		runningOffset += card_count
 
-		if combined:
+		if is_dfc:
 			back_card_element = ET.Element("card")
 			back_id_element = ET.Element("id")
 			back_slots_element = ET.Element("slots")
@@ -146,7 +151,7 @@ def createXMLFileForMPCFill(decklistDict, existingImageDict, subDir, files, form
 			back_name_element.text = combined[1] + IMAGE_SUFFIX
 			back_slots_element.text = slots
 			
-			#back_card_element.append(back_id_element)
+			back_card_element.append(back_id_element)
 			back_card_element.append(slots_element)
 			back_card_element.append(back_name_element)
 			
@@ -233,26 +238,27 @@ def reprocessImageForMPCFill(oldImagePath, newImagePath):
 	# Save the new image
 	new_image.save(newImagePath)
 
-def isPartOfDoubleFacedCardDict(doubleFacedCardDict, cardName):
-	for frontName, backName in doubleFacedCardDict.items():
-		if frontName == cardName or backName == cardName:
-			return True
+DFC_LAYOUTS = {'transform', 'modal_dfc'}
+dfc_fronts = {}  # front face name → combined name
+dfc_backs  = set()  # back face names
 
-	return False
+def buildDFCLookups(normalCards):
+	for combined_name, card_list in normalCards.items():
+		if ' // ' not in combined_name:
+			continue
+		if card_list[0].get('layout') not in DFC_LAYOUTS:
+			continue
+		front, back = combined_name.split(' // ', 1)
+		dfc_fronts[front] = combined_name
+		dfc_backs.add(back)
 
-def isDoubleFacedFrontFace(doubleFacedCardDict, cardName):
-	for frontName, backName in doubleFacedCardDict.items():
-		if frontName == cardName:
-			return True
+def isDFCFrontFace(cardName):
+	plain = re.sub(r'\s*\([A-Z0-9]{2,6}\)$', '', cardName).strip()
+	return plain in dfc_fronts
 
-	return False
-
-def isDoubleFacedBackFace(doubleFacedCardDict, cardName):
-	for frontName, backName in doubleFacedCardDict.items():
-		if backName == cardName:
-			return True
-
-	return False
+def isDFCBackFace(cardName):
+	plain = re.sub(r'\s*\([A-Z0-9]{2,6}\)$', '', cardName).strip()
+	return plain in dfc_backs
 
 def fixCardName(cardName, formatName):
 	# Convert Fire / Ice, Fire//Ice into Fire_Ice
@@ -279,15 +285,6 @@ def fixCardName(cardName, formatName):
 	return cardName.strip()
 
 
-def addDoubleFacedCardsToDict(decklistDict):
-	cardsToAdd = {}
-	for cardName, cardCount in decklistDict.items():
-		otherFaceCardName = doubleFacedCardDict.get(cardName, None)
-		if otherFaceCardName != None:
-			cardsToAdd[otherFaceCardName] = cardCount
-
-	for cardName, cardCount in cardsToAdd.items():
-		decklistDict[cardName] = cardCount
 
 def prepareMagicImagesDirectory():
 	# create magic images directory, if necessary
@@ -305,24 +302,6 @@ def prepareMPCFillXMLDirectory():
 		shutil.rmtree(MPC_FILL_XML_DIRECTORY)
 	os.mkdir(MPC_FILL_XML_DIRECTORY)
 
-def prepareDoubleFacedCardFile():
-	# go through double-faced card dictionary, which gets appended to over time as double-faced cards are downloaded
-	if not os.path.isfile(DOUBLE_FACED_CARD_DICTIONARY_PATH):
-		open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'w').close()
-
-def populateDoubleFacedCardDict():
-	doubleFacedCardDict = {}
-	with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'r+') as doubleFacedCardFile:
-		doubleFacedCardFileContents = doubleFacedCardFile.read()
-		frontFaceName = None
-		for line in doubleFacedCardFileContents.split("\n"):
-			if not frontFaceName:
-				frontFaceName = line.strip()
-			else:
-				doubleFacedCardDict[frontFaceName] = line.strip()
-				frontFaceName = None
-
-	return doubleFacedCardDict
 
 def populateExistingImageDict():
 	# go through image directory, make dictionary of existing names
@@ -355,7 +334,6 @@ def populateInitialDecklistDict(subDir, fileName):
 		if cardName:
 			decklistDict[cardName] = decklistDict.get(cardName, 0) + cardCount
 
-	addDoubleFacedCardsToDict(decklistDict)
 	return decklistDict
 
 def deleteExistingDecklistImages(subDir, files):
@@ -444,17 +422,23 @@ def copyCardImagesToDecklistDirectory(decklistDict, existingImageDict, subDir, f
 def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName):
 	# iterate through dictionary again, copying over as many copies as the decklist specifies
 	for initialCardName, cardCount in decklistDict.items():
-		cardName = fixCardName(initialCardName, formatName)
-		combined = splitCombinedCardName(cardName)
+		combined = splitCombinedCardName(initialCardName)
 		if combined:
-			frontName, backName = combined
-			for faceName in (frontName, backName):
-				if not unfoundCardDict.get(faceName + IMAGE_SUFFIX, False):
-					oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, faceName + IMAGE_SUFFIX)
-					newImagePath = os.path.join(subDir, faceName + IMAGE_SUFFIX)
+			if isDFCFrontFace(combined[0]):
+				for faceName in combined:
+					if not unfoundCardDict.get(faceName + IMAGE_SUFFIX, False):
+						oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, faceName + IMAGE_SUFFIX)
+						newImagePath = os.path.join(subDir, faceName + IMAGE_SUFFIX)
+						reprocessImageForMPCFill(oldImagePath, newImagePath)
+			else:
+				imageNameToCheck = safeFilename(initialCardName) + IMAGE_SUFFIX
+				if not unfoundCardDict.get(imageNameToCheck, False):
+					oldImagePath = os.path.join(IMAGE_DIRECTORY_ROOT, imageNameToCheck)
+					newImagePath = os.path.join(subDir, imageNameToCheck)
 					reprocessImageForMPCFill(oldImagePath, newImagePath)
 			continue
 
+		cardName = fixCardName(initialCardName, formatName)
 		imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 
 		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
@@ -469,16 +453,14 @@ def copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, su
 			newImagePath = os.path.join(subDir, safeFilename(cardName) + IMAGE_SUFFIX)
 			reprocessImageForMPCFill(oldImagePath, newImagePath)
 
-def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, existingImageDict):
+def downloadSingleCardImage(scryfallName, fileCardName, existingImageDict):
 	downloadSuccess = False
-	needToRerunLoop = False
 
-	# If card name is "Front // Back (SET)", download each face as its own file
+	# DFCs: download each face as its own file. Non-DFC combined (split/adventure): fall through to single download.
 	combined = splitCombinedCardName(fileCardName)
-	if combined:
-		frontName, backName = combined
-		frontSuccess, _ = downloadSingleCardImage(frontName, frontName, doubleFacedCardDict, existingImageDict)
-		backSuccess, _ = downloadSingleCardImage(backName, backName, doubleFacedCardDict, existingImageDict)
+	if combined and isDFCFrontFace(combined[0]):
+		frontSuccess, _ = downloadSingleCardImage(combined[0], combined[0], existingImageDict)
+		backSuccess, _ = downloadSingleCardImage(combined[1], combined[1], existingImageDict)
 		return frontSuccess and backSuccess, False
 
 	# Extract optional set code (e.g. "Savannah Lions (A25)" → set_code="A25")
@@ -522,21 +504,7 @@ def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, exi
 		if incorrect_set_code or ignore_this_set:
 			continue
 
-		# If this is a newly-encountered double-faced card, record it and signal a re-run
-		if doubleFaced and not isPartOfDoubleFacedCardDict(doubleFacedCardDict, fileCardName):
-			card_faces = card.get("card_faces", [])
-			if len(card_faces) >= 2:
-				backFaceName = card_faces[1]["name"]
-				print("Found double-faced card '%s', adding to dictionary and re-running" % fileCardName)
-				if set_code:
-					backFaceName = backFaceName + " (" + set_code + ")"
-				with open(DOUBLE_FACED_CARD_DICTIONARY_PATH, 'a+') as f:
-					f.write(fileCardName + "\n")
-					f.write(backFaceName + "\n")
-				doubleFacedCardDict[fileCardName] = backFaceName
-				needToRerunLoop = True
-
-		isBackFace = isDoubleFacedBackFace(doubleFacedCardDict, fileCardName)
+		isBackFace = isDFCBackFace(fileCardName)
 		if "image_uris" in card:
 			imgUrl = card["image_uris"]["png"]
 		elif "card_faces" in card:
@@ -557,62 +525,58 @@ def downloadSingleCardImage(scryfallName, fileCardName, doubleFacedCardDict, exi
 		downloadSuccess = True
 		time.sleep(0.3)
 
-	return downloadSuccess, needToRerunLoop
+	return downloadSuccess, False
 
 def downloadMissingCardImages(decklistDict, unfoundCardDict):
-	needToRerunLoop = False
-
 	for initialCardName, cardCount in decklistDict.items():
-		# print "%s: %s" % (cardName, cardCount)
-
-		# check if file already exists in current directory
-		cardName = fixCardName(initialCardName, formatName)
-		#print("Fixed cardName %s" % cardName)
-
-		combined = splitCombinedCardName(cardName)
+		combined = splitCombinedCardName(initialCardName)
 		if combined:
-			frontName, backName = combined
-			frontImageName = frontName + IMAGE_SUFFIX
-			backImageName = backName + IMAGE_SUFFIX
-			if canSkipCardImageDownload(frontImageName, files, existingImageDict) and \
-			   canSkipCardImageDownload(backImageName, files, existingImageDict):
-				continue
-			imageNameToCheck = frontImageName
-		else:
-			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
-			if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
-				continue
+			if isDFCFrontFace(combined[0]):
+				frontImageName = combined[0] + IMAGE_SUFFIX
+				backImageName = combined[1] + IMAGE_SUFFIX
+				if canSkipCardImageDownload(frontImageName, files, existingImageDict) and \
+				   canSkipCardImageDownload(backImageName, files, existingImageDict):
+					continue
+				imageNameToCheck = frontImageName
+			else:
+				imageNameToCheck = safeFilename(initialCardName) + IMAGE_SUFFIX
+				if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+					continue
+			print("%s not downloaded, trying to download from scryfall" % initialCardName)
+			downloadSuccess, _ = downloadSingleCardImage(initialCardName, initialCardName, existingImageDict)
+			if not downloadSuccess:
+				unfoundCardDict[imageNameToCheck] = os.path.join(subDir, fileName)
+				print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % initialCardName)
+			continue
+
+		cardName = fixCardName(initialCardName, formatName)
+		imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
+		if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
+			continue
 
 		if USE_FORMAT_SPECIFIC_LANDS and initialCardName in BASIC_LAND_NAMES:
 			print("Couldn't find '%s' in the magic images folder or existing images dict.  If you want a format-specific land, you'll have to create it manually.  Using the default %s instead" % (cardName, initialCardName))
 			cardName = initialCardName
-
 			imageNameToCheck = safeFilename(cardName) + IMAGE_SUFFIX
 			if canSkipCardImageDownload(imageNameToCheck, files, existingImageDict):
 				continue
 
-		# try to download from magiccards.info to image directory
 		print("%s not downloaded, trying to download from scryfall" % cardName)
-
-		downloadSuccess, needToRerunForThisCard = downloadSingleCardImage(initialCardName, cardName, doubleFacedCardDict, existingImageDict)
-		if needToRerunForThisCard:
-			needToRerunLoop = True
-
+		downloadSuccess, _ = downloadSingleCardImage(initialCardName, cardName, existingImageDict)
 		if not downloadSuccess:
 			unfoundCardDict[imageNameToCheck] = os.path.join(subDir, fileName)
 			print("Couldn't download '%s', most likely the card name is mispelled or missing a comma" % cardName)
-			# raise Exception("Couldn't find card: '%s' " % imageNameToCheck)
 
-	#print("At end of downloadMissingCardImages.  Need to rerun loop (new double-faced cards found)? %s" % needToRerunLoop)
-	return needToRerunLoop
+	return False
 
 # main
 prepareMagicImagesDirectory()
 prepareDecklistsDirectory()
-prepareDoubleFacedCardFile()
 prepareMPCFillXMLDirectory()
 
-doubleFacedCardDict = populateDoubleFacedCardDict()
+with open('AtomicCards.json', 'r', encoding='utf-8') as f:
+	buildDFCLookups(json.load(f)['data'])
+
 existingImageDict = populateExistingImageDict()
 unfoundCardDict = {}
 
@@ -627,10 +591,8 @@ for subDir, dirs, files in os.walk(DECKLIST_DIRECTORY_ROOT):
 	for fileName in files:
 		#if a txt file is found
 		if fileName.endswith(DECKLIST_SUFFIX):
-			runLoop = True
-			while(runLoop):
-				decklistDict = populateInitialDecklistDict(subDir, fileName)
-				runLoop = downloadMissingCardImages(decklistDict, unfoundCardDict)
+			decklistDict = populateInitialDecklistDict(subDir, fileName)
+			downloadMissingCardImages(decklistDict, unfoundCardDict)
 
 			if currentDirPlayer and DO_MPCFILL_POSTPROCESSING:
 				copyCardImagesToDecklistDirectoryMPCFill(decklistDict, existingImageDict, subDir, files, formatName)
